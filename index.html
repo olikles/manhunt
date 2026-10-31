@@ -117,6 +117,7 @@ button{cursor:pointer;touch-action:manipulation}
 .step{display:flex;align-items:center;gap:6px}
 .step b{min-width:64px;text-align:center;font:700 16px var(--display);font-variant-numeric:tabular-nums}
 .step button{width:40px;height:40px;border-radius:4px;border:1px solid var(--line);background:var(--panel2);font:700 20px/1 var(--display)}
+.step button:disabled{opacity:.35;cursor:not-allowed}
 .note{font-size:14px;color:var(--muted)}
 .note b{color:var(--fg)}
 .big{font:700 26px/1.1 var(--display);letter-spacing:.04em;text-transform:uppercase}
@@ -553,11 +554,15 @@ function toggleRole(id) {
   roles[id] = baseRole(id) === 'runner' ? 'hunter' : 'runner';
   pubCfg({ ...S.cfg, roles });
 }
-function randomRunner() {
-  const ps = present(); if (!ps.length) return;
-  const pick = ps[Math.floor(Math.random() * ps.length)];
-  const roles = {}; ps.forEach(p => roles[p.id] = p.id === pick.id ? 'runner' : 'hunter');
+function randMax() { return Math.max(1, present().length - 1); }
+function randomRunners(n) {
+  const ps = present().slice(); if (!ps.length) return;
+  n = Math.max(1, Math.min(n, randMax()));
+  const rnd = new Uint32Array(ps.length); crypto.getRandomValues(rnd);
+  for (let i = ps.length - 1; i > 0; i--) { const j = rnd[i] % (i + 1); [ps[i], ps[j]] = [ps[j], ps[i]]; }
+  const roles = {}; ps.forEach((p, i) => roles[p.id] = i < n ? 'runner' : 'hunter');
   pubCfg({ ...S.cfg, roles });
+  toast(n === 1 ? 'Runner ausgelost: ' + ps[0].name : n + ' Runner ausgelost', 'runner');
 }
 function setSetting(k, v) { pubCfg({ ...S.cfg, settings: { ...S.cfg.settings, [k]: v } }); }
 function sendCatch(id) {
@@ -774,7 +779,13 @@ function renderSheet() {
       <div class="code"><b>${esc(S.code)}</b><button class="btn sm" data-act="share">Einladen</button></div></div>`;
     h += `<div class="sec"><div class="h">Spieler${host ? ' <span>Tippen = Rolle wechseln</span>' : ''}</div><div class="list">
       ${ps.map(p => plRow(p, { role: baseRole(p.id), btn: host ? 'role' : null })).join('')}</div>
-      ${host ? `<button class="btn sm" data-act="rand">Zufälligen Runner wählen</button>` : ''}</div>`;
+      </div>`;
+    if (host) {
+      const rn = Math.min(S.randN || 1, randMax());
+      h += `<div class="sec"><div class="h">Auslosen</div>
+        <div class="set"><div>Anzahl Runner</div><div class="step"><button data-act="rdec" aria-label="weniger" ${rn <= 1 ? 'disabled' : ''}>−</button><b>${rn}</b><button data-act="rinc" aria-label="mehr" ${rn >= randMax() ? 'disabled' : ''}>+</button></div></div>
+        <button class="btn" data-act="rand">${rn === 1 ? '1 Runner' : rn + ' Runner'} zufällig auslosen</button></div>`;
+    }
     h += `<div class="sec"><div class="h">Regeln</div><div>
       ${stepper('ping', st.ping, 'min', { label: 'Ping alle' })}
       ${stepper('head', st.head, 'min', { label: 'Vorsprung Runner' })}
@@ -845,7 +856,9 @@ $('#sheetBody').addEventListener('click', e => {
   switch (a) {
     case 'share': share(); break;
     case 'role': toggleRole(id); break;
-    case 'rand': randomRunner(); break;
+    case 'rand': randomRunners(Math.min(S.randN || 1, randMax())); break;
+    case 'rinc': S.randN = Math.min(randMax(), (S.randN || 1) + 1); break;
+    case 'rdec': S.randN = Math.max(1, Math.min(randMax(), (S.randN || 1)) - 1); break;
     case 'inc': case 'dec': {
       const k = b.dataset.k, dir = a === 'inc' ? 1 : -1;
       if (k === 'ping') { const i = Math.max(0, Math.min(PING_OPTS.length - 1, PING_OPTS.indexOf(st.ping) + dir)); setSetting('ping', PING_OPTS[i] ?? 4); }
