@@ -217,7 +217,7 @@ label.f{display:grid;gap:6px;font:600 11px var(--display);letter-spacing:.16em;c
 // ---------- Konstanten ----------
 const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt'];
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const DEF_SETTINGS = { ping: 4, head: 3, dur: 60, area: [] };
+const DEF_SETTINGS = { ping: 4, head: 3, dur: 60, area: [], zone: true, zr0: 600, zr1: 75, zshrink: 45, zgrace: 60 };
 const PING_OPTS = [1, 2, 3, 4, 5, 6, 8, 10, 15];
 const STALE_MS = 45000;
 const COL = { hunter: '#ff5b4f', runner: '#ffb23f', accent: '#9ad15b' };
@@ -447,13 +447,14 @@ function noteCatch(o) {
   const k = o.id + ':' + o.caughtAt; if (S.toasted.has(k)) return;
   S.toasted.add(k);
   if (now() - o.caughtAt > 60000) return;
-  const by = o.caughtBy && S.players[o.caughtBy] ? ' von ' + S.players[o.caughtBy].name : '';
+  const by = o.caughtBy === 'zone' ? ' (zu lange außerhalb der Zone)' : o.caughtBy && S.players[o.caughtBy] ? ' von ' + S.players[o.caughtBy].name : '';
   toast(o.name + ' wurde gefangen' + by + '!', 'hunter');
   beep([[520, .12], [390, .25]]); buzz(300);
 }
 
 function tickGame() {
   const ph = phase();
+  zoneTick(ph);
   if (ph === 'head' || ph === 'hunt') {
     const idx = pingIdx(), t = times();
     if (S.lastIdx === null) {
@@ -506,6 +507,37 @@ function winner() {
   return runnersLeft(at).length === 0 && origRunners().length > 0 ? 'hunter' : 'runner';
 }
 
+// ---------- Schrumpfzone ----------
+const setv = k => S.cfg?.settings?.[k] ?? DEF_SETTINGS[k];
+function zoneNow() {
+  const c = S.cfg; if (!c || !c.zone || !c.startAt) return null;
+  const t = times(), z = c.zone;
+  const sd = Math.max(0, Math.min(z.shrinkMs, t.endAt - t.headEnd));
+  const f = sd <= 0 ? 1 : Math.max(0, Math.min(1, (now() - t.headEnd) / sd));
+  return { lat: z.lat, lng: z.lng, r: z.r0 + (z.r1 - z.r0) * f, r1: z.r1, f, shrinkEnd: t.headEnd + sd, grace: z.grace };
+}
+function zoneState(pos) {
+  if (!pos) return null;
+  const z = zoneNow(); const area = S.cfg?.settings?.area || [];
+  let out = false, edge = null;
+  if (z) {
+    const d = haversine(pos, z);
+    edge = z.r - d;
+    if (d > z.r + Math.min(pos.acc || 0, 25)) out = true;
+  }
+  if (area.length >= 3 && !inPoly(pos, area)) out = true;
+  return { out, edge, z };
+}
+function zoneTick(ph) {
+  if (!(ph === 'head' || ph === 'hunt') || !S.pos || now() - S.pos.t > 30000) { S.outSince = null; return; }
+  const zs = zoneState(S.pos);
+  if (!zs || !zs.out) { if (S.outSince) toast('Wieder in der Zone.', ''); S.outSince = null; return; }
+  if (!S.outSince) S.outSince = now();
+  if (now() - (S.lastOob || 0) > 10000) { S.lastOob = now(); beep([[200, .3], [200, .3]]); buzz([500, 200, 500]); }
+  const grace = (S.cfg.zone?.grace ?? setv('zgrace')) * 1000;
+  if (role(me.id) === 'runner' && now() - S.outSince >= grace) { S.outSince = null; beCaught('zone'); }
+}
+
 // ---------- Aktionen ----------
 async function enterRoom(code, create) {
   const name = $('#nameIn').value.trim();
@@ -545,7 +577,15 @@ function leave() {
   }, 500);
 }
 function startGame() {
-  pubCfg({ ...S.cfg, status: 'running', startAt: now(), endedAt: null });
+  let zone = null;
+  if (setv('zone')) {
+    let ctr = S.pos ? { lat: S.pos.lat, lng: S.pos.lng } : null;
+    const area = S.cfg.settings.area || [];
+    if (!ctr && area.length >= 3) ctr = { lat: area.reduce((a, p) => a + p[0], 0) / area.length, lng: area.reduce((a, p) => a + p[1], 0) / area.length };
+    if (ctr) zone = { lat: +ctr.lat.toFixed(6), lng: +ctr.lng.toFixed(6), r0: setv('zr0'), r1: Math.min(setv('zr1'), setv('zr0')), shrinkMs: setv('zshrink') * 60000, grace: setv('zgrace') };
+    else toast('Kein GPS: Spiel startet ohne Schrumpfzone.', 'hunter');
+  }
+  pubCfg({ ...S.cfg, status: 'running', startAt: now(), endedAt: null, zone });
 }
 function endGame() { pubCfg({ ...S.cfg, status: 'ended', endedAt: now() }); }
 function newRound() { pubCfg({ ...S.cfg, status: 'lobby', startAt: null, endedAt: null }); }
@@ -573,7 +613,7 @@ function sendCatch(id) {
 function beCaught(by) {
   S.caughtAt = now(); S.caughtBy = by || null; S.ping = null;
   pubMe(true);
-  toast('Du wurdest gefangen. Jetzt bist du Jäger!', 'hunter');
+  toast(by === 'zone' ? 'Zu lange außerhalb der Zone. Du giltst als gefangen und bist jetzt Jäger!' : 'Du wurdest gefangen. Jetzt bist du Jäger!', 'hunter');
   beep([[440, .15], [330, .3]]); buzz([300, 100, 300]);
   render();
 }
@@ -665,6 +705,20 @@ function renderMap() {
   const area = S.drawing ? S.draft : (S.cfg?.settings?.area || []);
   if (area.length >= 3) L.polygon(area, { color: COL.accent, weight: 2, dashArray: S.drawing ? '6 6' : null, fillOpacity: .05, interactive: false }).addTo(dyn);
   else if (area.length === 2) L.polyline(area, { color: COL.accent, weight: 2, dashArray: '6 6', interactive: false }).addTo(dyn);
+  const ph0 = phase();
+  if (ph0 === 'head' || ph0 === 'hunt') {
+    const z = zoneNow();
+    if (z) {
+      L.circle([z.lat, z.lng], { radius: z.r, color: COL.accent, weight: 3, fillOpacity: .04, interactive: false }).addTo(dyn);
+      if (z.f < 1) L.circle([z.lat, z.lng], { radius: z.r1, color: COL.accent, weight: 1.5, dashArray: '4 6', fill: false, interactive: false }).addTo(dyn);
+    }
+  } else if (ph0 === 'lobby' && setv('zone') && !S.drawing) {
+    const hp = allPlayers()[S.cfg.host];
+    if (hp && hp.lat != null) {
+      L.circle([hp.lat, hp.lng], { radius: setv('zr0'), color: COL.accent, weight: 2, dashArray: '8 6', fillOpacity: .03, interactive: false }).addTo(dyn);
+      L.circle([hp.lat, hp.lng], { radius: Math.min(setv('zr1'), setv('zr0')), color: COL.accent, weight: 1.5, dashArray: '4 6', fill: false, interactive: false }).addTo(dyn);
+    }
+  }
   if (S.drawing) area.forEach(pt => L.marker(pt, { icon: L.divIcon({ className: '', html: '<div class="mk-v"></div>', iconSize: [12, 12] }), interactive: false }).addTo(dyn));
   // Ich
   if (S.pos) {
@@ -730,10 +784,16 @@ function renderHud() {
   const al = [];
   if (S.geoErr) al.push(['bad', S.geoErr]);
   if (!ok && S.clients.length) al.push(['bad', 'Keine Verbindung zum Server. Prüfe dein mobiles Internet.']);
-  const area = S.cfg?.settings?.area || [];
-  if (S.pos && area.length >= 3 && (ph === 'head' || ph === 'hunt') && !inPoly(S.pos, area)) {
-    al.push(['bad', 'Du bist außerhalb des Spielfelds! Geh zurück.']);
-    if (now() - (S.lastOob || 0) > 15000) { S.lastOob = now(); beep([[200, .3], [200, .3]]); buzz([500, 200, 500]); }
+  if (ph === 'head' || ph === 'hunt') {
+    const zs = zoneState(S.pos);
+    if (zs && zs.out) {
+      if (role(me.id) === 'runner' && S.outSince) {
+        const left = (S.cfg.zone?.grace ?? setv('zgrace')) * 1000 - (now() - S.outSince);
+        al.push(['bad', 'Außerhalb der Zone! Zurück in ' + mmss(left) + ', sonst giltst du als gefangen.']);
+      } else al.push(['bad', 'Du bist außerhalb der Zone! Geh zurück.']);
+    } else if (zs && zs.edge != null && zs.edge < 40 && zs.z.f < 1) {
+      al.push(['', 'Die Zone wird kleiner. Du bist nur ' + Math.max(0, Math.round(zs.edge)) + ' m vom Rand entfernt.']);
+    }
   }
   if (wakeTried && !WL && (ph === 'head' || ph === 'hunt')) al.push(['', 'Bildschirm muss anbleiben. Stell die Auto-Sperre auf „Nie“.']);
   const html = al.map(([c, m]) => `<div class="alert ${c}">${esc(m)}</div>`).join('');
@@ -790,6 +850,13 @@ function renderSheet() {
       ${stepper('ping', st.ping, 'min', { label: 'Ping alle' })}
       ${stepper('head', st.head, 'min', { label: 'Vorsprung Runner' })}
       ${stepper('dur', st.dur, 'min', { label: 'Spieldauer' })}
+      <div class="set"><div>Schrumpfzone</div>${host
+        ? `<button class="btn sm" data-act="ztog">${setv('zone') ? 'An' : 'Aus'}</button>`
+        : `<b style="font-family:var(--display)">${setv('zone') ? 'An' : 'Aus'}</b>`}</div>
+      ${setv('zone') ? `${stepper('zr0', setv('zr0'), 'm', { label: 'Zone am Anfang' })}
+      ${stepper('zr1', Math.min(setv('zr1'), setv('zr0')), 'm', { label: 'Zone am Ende' })}
+      ${stepper('zshrink', Math.min(setv('zshrink'), st.dur), 'min', { label: 'Schrumpft über' })}
+      ${stepper('zgrace', setv('zgrace'), 's', { label: 'Außerhalb bis gefangen' })}` : ''}
       <div class="set"><div>Spielfeld</div>${host
         ? `<button class="btn sm" data-act="draw">${st.area.length >= 3 ? st.area.length + ' Ecken · ändern' : 'Zeichnen'}</button>`
         : `<b style="font-family:var(--display)">${st.area.length >= 3 ? st.area.length + ' Ecken' : 'Keins'}</b>`}</div></div></div>`;
@@ -800,7 +867,7 @@ function renderSheet() {
   } else if (ph === 'head' || ph === 'hunt') {
     const my = role(me.id);
     const left = runnersLeft();
-    h += `<div class="sec keep"><div class="h"><span>${ph === 'head' ? 'Vorsprung läuft' : 'Jagd läuft'}</span><span>${left.length} von ${origRunners().length} Runnern frei</span></div></div>`;
+    h += `<div class="sec keep"><div class="h"><span>${ph === 'head' ? 'Vorsprung läuft' : 'Jagd läuft'}</span><span>${left.length} von ${origRunners().length} Runnern frei</span></div>${zoneLine()}</div>`;
     const runners = ps.filter(p => role(p.id) === 'runner');
     const hunters = ps.filter(p => role(p.id) === 'hunter');
     if (my === 'hunter') {
@@ -834,7 +901,7 @@ function renderSheet() {
     h += `<div class="sec"><div class="h">Runner</div><div class="list">${origRunners().map(p => {
       const ct = caughtTime(p.id); const caught = ct && ct <= at;
       const by = caught && (p.id === me.id ? S.caughtBy : p.caughtBy);
-      const byN = by ? (by === me.id ? me.name : S.players[by]?.name) : null;
+      const byN = by === 'zone' ? 'der Zone' : by ? (by === me.id ? me.name : S.players[by]?.name) : null;
       return plRow(p, { role: 'runner', out: caught, sub: caught ? 'Gefangen nach ' + mmss(ct - t.headEnd) + (byN ? ' von ' + byN : '') : 'Entkommen', right: `<span class="tag">${caught ? 'Gefangen' : 'Frei'}</span>` });
     }).join('')}</div></div>`;
     h += host ? `<button class="btn pri wide keep" data-act="again">Neue Runde</button>` : `<div class="note keep">Der Host kann eine neue Runde starten.</div>`;
@@ -847,6 +914,13 @@ function renderSheet() {
   document.documentElement.style.setProperty('--sheet-h', $('#sheet').offsetHeight + 'px');
 }
 
+function zoneLine() {
+  const z = zoneNow(); if (!z) return '';
+  const r = Math.round(z.r / 5) * 5;
+  const txt = z.f >= 1 ? 'Zone: ' + r + ' m, kleinste Größe erreicht'
+    : 'Zone: ' + r + ' m, schrumpft auf ' + z.r1 + ' m' + (now() < times().headEnd ? ' ab Jagdbeginn' : '');
+  return `<div class="note" data-zone>${txt}</div>`;
+}
 function render() { renderHud(); renderSheet(); renderMap(); }
 
 // Klicks im Panel
@@ -864,6 +938,10 @@ $('#sheetBody').addEventListener('click', e => {
       if (k === 'ping') { const i = Math.max(0, Math.min(PING_OPTS.length - 1, PING_OPTS.indexOf(st.ping) + dir)); setSetting('ping', PING_OPTS[i] ?? 4); }
       if (k === 'head') setSetting('head', Math.max(0, Math.min(20, st.head + dir)));
       if (k === 'dur') setSetting('dur', Math.max(10, Math.min(240, st.dur + dir * 10)));
+      if (k === 'zr0') { const v = Math.max(100, Math.min(5000, setv('zr0') + dir * 100)); pubCfg({ ...S.cfg, settings: { ...st, zr0: v, zr1: Math.min(setv('zr1'), v) } }); }
+      if (k === 'zr1') setSetting('zr1', Math.max(25, Math.min(setv('zr0'), Math.min(setv('zr1'), setv('zr0')) + dir * 25)));
+      if (k === 'zshrink') setSetting('zshrink', Math.max(5, Math.min(st.dur, Math.min(setv('zshrink'), st.dur) + dir * 5)));
+      if (k === 'zgrace') setSetting('zgrace', Math.max(15, Math.min(300, setv('zgrace') + dir * 15)));
       break;
     }
     case 'draw': S.drawing = true; S.draft = [...(st.area || [])]; S.sheetMin = false;
@@ -874,6 +952,7 @@ $('#sheetBody').addEventListener('click', e => {
     case 'vDone': S.drawing = false; setSetting('area', S.draft); break;
     case 'vCancel': S.drawing = false; break;
     case 'start': startGame(); break;
+    case 'ztog': setSetting('zone', !setv('zone')); break;
     case 'catch': S.confirm = 'catch:' + id; break;
     case 'catchGo': S.confirm = null; sendCatch(id); break;
     case 'caught': S.confirm = 'caught'; break;
@@ -928,7 +1007,8 @@ if (saved && me.name && (!hashCode || hashCode === saved)) {
 setInterval(() => {
   if (!S.T) return;
   tickGame(); renderHud();
-  document.querySelectorAll('.leaflet-tooltip').length && phase() === 'hunt' && renderMap();
+  const ph = phase();
+  if (ph === 'head' || ph === 'hunt') { renderMap(); const zl = document.querySelector('[data-zone]'); if (zl) { const t = document.createElement('div'); t.innerHTML = zoneLine(); if (t.firstChild) zl.textContent = t.firstChild.textContent; } }
 }, 1000);
 setInterval(() => { if (S.T) { pubMe(true); renderSheet(); } }, 10000);
 window.addEventListener('pagehide', () => { if (S.T) pubMe(true); });
