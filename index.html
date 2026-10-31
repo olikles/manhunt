@@ -1,0 +1,925 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a0e0b">
+<title>Manhunt</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Barlow+Semi+Condensed:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<style>
+/* Layout: Vollbild-Karte, oben HUD-Leiste, unten einklappbares Panel. Ein dunkler Look. */
+:root{
+  --bg:#0a0e0b; --panel:#111813; --panel2:#18221c; --line:#27362c;
+  --fg:#dbe7de; --muted:#7f978a; --accent:#9ad15b; --accent-ink:#0d1409;
+  --hunter:#ff5b4f; --runner:#ffb23f; --warn:#ffb23f; --danger:#ff5b4f;
+  --display:'Chakra Petch', ui-monospace, 'SF Mono', Menlo, monospace;
+  --body:'Barlow Semi Condensed', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --sat:env(safe-area-inset-top,0px); --sab:env(safe-area-inset-bottom,0px);
+  --sal:env(safe-area-inset-left,0px); --sar:env(safe-area-inset-right,0px);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 var(--body);overflow:hidden;-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer;touch-action:manipulation}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}
+
+/* Karte */
+#map{position:fixed;inset:0;background:#0d120f;z-index:0}
+.leaflet-container{background:#0d120f;font-family:var(--body)}
+.leaflet-tile-pane{filter:invert(1) hue-rotate(185deg) brightness(.78) contrast(.92) saturate(.35)}
+.leaflet-top{top:calc(var(--sat) + 104px)}
+.leaflet-control-attribution{background:rgba(10,14,11,.75)!important;color:var(--muted)!important;font-size:10px}
+.leaflet-control-attribution a{color:var(--muted)!important}
+.leaflet-tooltip.nm{background:rgba(10,14,11,.85);border:1px solid var(--line);color:var(--fg);font:600 12px/1.2 var(--body);padding:2px 6px;border-radius:3px;box-shadow:none}
+.leaflet-tooltip.nm::before{display:none}
+
+.mk{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font:700 11px var(--display);color:#0a0e0b;border:2px solid #0a0e0b;box-shadow:0 0 0 2px currentColor}
+.mk.hunter{background:var(--hunter);color:var(--hunter)}
+.mk.runner{background:var(--runner);color:var(--runner)}
+.mk span{color:#0a0e0b}
+.mk.stale{opacity:.45}
+.mk-me{width:20px;height:20px;border-radius:50%;background:#fff;border:4px solid var(--accent);box-shadow:0 0 0 6px rgba(154,209,91,.25)}
+.mk-me.hunter{border-color:var(--hunter);box-shadow:0 0 0 6px rgba(255,91,79,.25)}
+.mk-me.runner{border-color:var(--runner);box-shadow:0 0 0 6px rgba(255,178,63,.25)}
+.mk-ping{width:26px;height:26px;position:relative}
+.mk-ping i{position:absolute;inset:7px;background:var(--runner);transform:rotate(45deg);border:2px solid #0a0e0b}
+.mk-ping::after{content:"";position:absolute;inset:0;border:2px solid var(--runner);border-radius:50%;animation:ripple 2s ease-out infinite}
+@keyframes ripple{from{transform:scale(.5);opacity:1}to{transform:scale(2.4);opacity:0}}
+.mk-v{width:12px;height:12px;background:var(--accent);border:2px solid #0a0e0b;transform:rotate(45deg)}
+
+/* HUD */
+#hud{position:fixed;top:0;left:0;right:0;z-index:20;padding:calc(var(--sat) + 8px) max(12px,var(--sar)) 8px max(12px,var(--sal));background:linear-gradient(var(--bg) 70%,rgba(10,14,11,0));pointer-events:none}
+#hud > *{pointer-events:auto}
+.hud-row{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px}
+.pill{justify-self:start;font:700 13px/1 var(--display);letter-spacing:.12em;padding:7px 10px;border:1px solid var(--line);border-radius:3px;background:var(--panel);text-transform:uppercase}
+.pill.hunter{color:var(--hunter);border-color:rgba(255,91,79,.5)}
+.pill.runner{color:var(--runner);border-color:rgba(255,178,63,.5)}
+.pill.lobby{color:var(--accent)}
+.clock{text-align:center}
+.clock b{display:block;font:700 30px/1 var(--display);font-variant-numeric:tabular-nums;letter-spacing:.02em}
+.clock small{display:block;font:500 11px/1.2 var(--display);letter-spacing:.14em;color:var(--muted);text-transform:uppercase;margin-top:3px}
+.pingbox{justify-self:end;display:flex;align-items:center;gap:8px}
+.pingbox .lbl{text-align:right;font:500 10px/1.15 var(--display);letter-spacing:.12em;color:var(--muted);text-transform:uppercase}
+.pingbox .lbl b{display:block;font:700 15px/1.1 var(--display);color:var(--fg);letter-spacing:.02em;font-variant-numeric:tabular-nums}
+.ring{width:38px;height:38px}
+.ring circle{fill:none;stroke-width:4}
+.ring .bg{stroke:var(--line)}
+.ring .fg{stroke:var(--accent);stroke-linecap:butt;transform:rotate(-90deg);transform-origin:50% 50%;transition:stroke-dashoffset .9s linear}
+.stat{display:flex;gap:12px;justify-content:center;margin-top:8px;font:500 11px/1 var(--display);letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
+.stat span{display:flex;align-items:center;gap:5px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.dot.ok{background:var(--accent)}.dot.bad{background:var(--danger)}.dot.mid{background:var(--warn)}
+#alerts{display:grid;gap:6px;margin-top:8px}
+.alert{font:600 14px/1.3 var(--body);padding:8px 10px;border-radius:3px;background:var(--panel);border-left:3px solid var(--warn)}
+.alert.bad{border-left-color:var(--danger);background:#2a1110;color:#ffd7d3}
+
+/* Kartenknöpfe */
+#fab{position:fixed;right:max(12px,var(--sar));z-index:15;display:grid;gap:8px;bottom:calc(var(--sheet-h,200px) + 12px)}
+.fab{width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--panel);display:grid;place-items:center}
+.fab svg{width:22px;height:22px;stroke:var(--fg);fill:none;stroke-width:2}
+
+/* Panel unten */
+#sheet{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--panel);border-top:1px solid var(--line);max-height:58vh;display:flex;flex-direction:column;padding-bottom:var(--sab)}
+#sheet .grab{border:0;background:none;padding:8px 0 4px;display:grid;place-items:center;width:100%}
+#sheet .grab i{width:42px;height:4px;border-radius:2px;background:var(--line)}
+#sheetBody{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px max(16px,var(--sar)) 16px max(16px,var(--sal));display:grid;gap:14px}
+#sheet.min #sheetBody > :not(.keep){display:none}
+.sec{display:grid;gap:8px}
+.h{font:600 11px/1 var(--display);letter-spacing:.16em;text-transform:uppercase;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
+.code{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.code b{font:700 34px/1 var(--display);letter-spacing:.18em;color:var(--accent)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn{border:1px solid var(--line);background:var(--panel2);padding:11px 14px;border-radius:4px;font-weight:600;font-size:15px;min-height:44px}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-family:var(--display);letter-spacing:.08em;text-transform:uppercase;font-size:15px}
+.btn.red{background:var(--hunter);border-color:var(--hunter);color:#1a0705;font-family:var(--display);letter-spacing:.06em;text-transform:uppercase}
+.btn.ghost{background:none}
+.btn.sm{min-height:36px;padding:7px 11px;font-size:14px}
+.btn.wide{width:100%}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.list{display:grid;gap:6px}
+.pl{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;padding:8px 10px;background:var(--panel2);border:1px solid var(--line);border-radius:4px;min-height:48px;text-align:left;width:100%}
+.pl .ic{width:12px;height:12px;border-radius:50%}
+.pl.hunter .ic{background:var(--hunter)}.pl.runner .ic{background:var(--runner)}
+.pl .nm{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pl .sub{display:block;font-size:13px;color:var(--muted);font-weight:500;font-variant-numeric:tabular-nums}
+.pl .tag{font:700 11px/1 var(--display);letter-spacing:.12em;text-transform:uppercase;padding:5px 7px;border-radius:3px;border:1px solid currentColor}
+.pl.hunter .tag{color:var(--hunter)}.pl.runner .tag{color:var(--runner)}
+.pl.out{opacity:.5}
+.set{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)}
+.set:last-child{border-bottom:0}
+.step{display:flex;align-items:center;gap:6px}
+.step b{min-width:64px;text-align:center;font:700 16px var(--display);font-variant-numeric:tabular-nums}
+.step button{width:40px;height:40px;border-radius:4px;border:1px solid var(--line);background:var(--panel2);font:700 20px/1 var(--display)}
+.note{font-size:14px;color:var(--muted)}
+.note b{color:var(--fg)}
+.big{font:700 26px/1.1 var(--display);letter-spacing:.04em;text-transform:uppercase}
+.big.hunter{color:var(--hunter)}.big.runner{color:var(--runner)}
+.confirm{display:grid;gap:8px;padding:10px;border:1px solid var(--danger);border-radius:4px;background:#1d0f0e}
+
+/* Startbildschirm */
+#start{position:fixed;inset:0;z-index:40;background:var(--bg);overflow-y:auto;padding:calc(var(--sat) + 28px) max(20px,var(--sar)) calc(var(--sab) + 28px) max(20px,var(--sal))}
+#start .wrap{max-width:420px;margin:0 auto;display:grid;gap:22px}
+.logo{font:700 52px/0.9 var(--display);letter-spacing:.06em;text-transform:uppercase}
+.logo span{color:var(--accent)}
+.tagline{color:var(--muted);margin-top:8px;font-size:16px}
+.grid-bg{position:fixed;inset:0;z-index:-1;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:44px 44px;opacity:.35;mask-image:radial-gradient(circle at 50% 20%,#000 0,transparent 75%);-webkit-mask-image:radial-gradient(circle at 50% 20%,#000 0,transparent 75%)}
+label.f{display:grid;gap:6px;font:600 11px var(--display);letter-spacing:.16em;color:var(--muted);text-transform:uppercase}
+.inp{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:12px;font:600 18px var(--body);color:var(--fg);min-height:48px}
+.inp.code-in{font:700 22px var(--display);letter-spacing:.3em;text-transform:uppercase}
+.or{display:flex;align-items:center;gap:10px;color:var(--muted);font:600 11px var(--display);letter-spacing:.16em}
+.or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
+.howto{display:grid;gap:8px;font-size:15px;color:var(--muted);border-top:1px solid var(--line);padding-top:16px}
+.howto b{color:var(--fg)}
+.err{color:#ffb4ad;font-weight:600;font-size:14px}
+
+/* Modal + Toast */
+#modal{position:fixed;inset:0;z-index:50;background:rgba(5,8,6,.8);display:grid;place-items:center;padding:20px}
+#modal .box{width:100%;max-width:380px;background:var(--panel);border:1px solid var(--hunter);border-radius:6px;padding:20px;display:grid;gap:14px}
+#toasts{position:fixed;left:0;right:0;z-index:45;bottom:calc(var(--sheet-h,200px) + 12px);display:grid;justify-items:start;gap:6px;pointer-events:none;padding:0 72px 0 max(16px,var(--sal))}
+.toast{background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--accent);padding:9px 12px;border-radius:3px;font-weight:600;max-width:420px;animation:tin .25s ease-out}
+.toast.hunter{border-left-color:var(--hunter)}.toast.runner{border-left-color:var(--runner)}
+@keyframes tin{from{transform:translateY(-8px);opacity:0}}
+@media (prefers-reduced-motion:reduce){.mk-ping::after,.toast{animation:none}.ring .fg{transition:none}}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="hud" hidden>
+  <div class="hud-row">
+    <div id="rolePill" class="pill lobby">Lobby</div>
+    <div class="clock"><b id="clock">--:--</b><small id="clockLbl">Warte auf Start</small></div>
+    <div class="pingbox" id="pingBox" hidden>
+      <div class="lbl">Ping in<b id="pingTxt">--:--</b></div>
+      <svg class="ring" viewBox="0 0 40 40" aria-hidden="true"><circle class="bg" cx="20" cy="20" r="16"/><circle class="fg" id="pingRing" cx="20" cy="20" r="16" stroke-dasharray="100.5" stroke-dashoffset="0"/></svg>
+    </div>
+  </div>
+  <div class="stat">
+    <span><i class="dot" id="dNet"></i><em id="tNet" style="font-style:normal">Server</em></span>
+    <span><i class="dot" id="dGps"></i><em id="tGps" style="font-style:normal">GPS</em></span>
+    <span><i class="dot" id="dWake"></i><em id="tWake" style="font-style:normal">Display</em></span>
+  </div>
+  <div id="alerts"></div>
+</div>
+
+<div id="fab" hidden>
+  <button class="fab" id="btnCenter" aria-label="Auf mich zentrieren"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></button>
+  <button class="fab" id="btnSound" aria-label="Ton an oder aus"><svg viewBox="0 0 24 24" id="sndIcon"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9c1.5 1.5 1.5 4.5 0 6M19 6c3 3 3 9 0 12"/></svg></button>
+</div>
+
+<div id="sheet" hidden>
+  <button class="grab" id="grab" aria-label="Panel ein- oder ausklappen"><i></i></button>
+  <div id="sheetBody"></div>
+</div>
+
+<div id="start">
+  <div class="grid-bg"></div>
+  <div class="wrap">
+    <div>
+      <div class="logo">Man<span>hunt</span></div>
+      <div class="tagline">Live-Jagd mit GPS-Pings. Läuft im Browser, auf iPhone und Android.</div>
+    </div>
+    <label class="f" for="nameIn">Dein Name
+      <input class="inp" id="nameIn" maxlength="16" autocomplete="nickname" placeholder="z.B. Oli">
+    </label>
+    <button class="btn pri wide" id="btnCreate">Neues Spiel erstellen</button>
+    <div class="or">ODER BEITRETEN</div>
+    <div class="row" style="flex-wrap:nowrap">
+      <input class="inp code-in" id="codeIn" maxlength="5" autocomplete="off" autocapitalize="characters" placeholder="CODE" style="flex:1;min-width:0">
+      <button class="btn pri" id="btnJoin">Los</button>
+    </div>
+    <div class="err" id="startErr" hidden></div>
+    <div class="howto">
+      <div><b>So geht's:</b> Einer erstellt das Spiel und teilt den Code. Alle anderen treten bei.</div>
+      <div><b>Wichtig fürs iPhone:</b> Seite offen lassen und Bildschirm an. Ist der Bildschirm aus, wird dein Standort nicht gesendet. Am besten Auto-Sperre auf „Nie“ stellen und Helligkeit runter.</div>
+      <div><b>Standort:</b> Beim Beitreten fragt der Browser nach deinem Standort. Bitte erlauben.</div>
+    </div>
+  </div>
+</div>
+
+<div id="modal" hidden><div class="box" id="modalBox"></div></div>
+<div id="toasts"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<script>
+(() => {
+'use strict';
+
+// ---------- Konstanten ----------
+const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt'];
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const DEF_SETTINGS = { ping: 4, head: 3, dur: 60, area: [] };
+const PING_OPTS = [1, 2, 3, 4, 5, 6, 8, 10, 15];
+const STALE_MS = 45000;
+const COL = { hunter: '#ff5b4f', runner: '#ffb23f', accent: '#9ad15b' };
+
+// ---------- Helfer ----------
+const $ = s => document.querySelector(s);
+const LS = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+  del(k) { try { localStorage.removeItem(k); } catch (e) {} }
+};
+const rid = n => { const a = crypto.getRandomValues(new Uint8Array(n)); return Array.from(a, b => CODE_CHARS[b % 32]).join(''); };
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const now = () => Date.now();
+const mmss = ms => { ms = Math.max(0, ms); const s = Math.ceil(ms / 1000); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : String(m).padStart(2, '0')) + ':' + String(r).padStart(2, '0'); };
+const ago = ts => { const s = Math.max(0, Math.round((now() - ts) / 1000)); if (s < 60) return 'vor ' + s + ' s'; const m = Math.floor(s / 60); return 'vor ' + m + ' min'; };
+const fmtDist = m => m == null ? '' : m < 1000 ? (Math.round(m / 5) * 5) + ' m' : (m / 1000).toFixed(m < 10000 ? 2 : 1).replace('.', ',') + ' km';
+function haversine(a, b) {
+  const R = 6371000, toR = x => x * Math.PI / 180;
+  const dLat = toR(b.lat - a.lat), dLng = toR(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toR(a.lat)) * Math.cos(toR(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+function inPoly(pt, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [yi, xi] = poly[i], [yj, xj] = poly[j];
+    if (((yi > pt.lat) !== (yj > pt.lat)) && (pt.lng < (xj - xi) * (pt.lat - yi) / (yj - yi) + xi)) inside = !inside;
+  }
+  return inside;
+}
+const b64 = u8 => { let s = ''; for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]); return btoa(s); };
+const unb64 = s => { const b = atob(s); const u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; };
+const hex = buf => Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('');
+
+// ---------- Zustand ----------
+const me = { id: LS.get('mh_id') || rid(12), name: LS.get('mh_name') || '' };
+LS.set('mh_id', me.id);
+
+const S = {
+  code: null, T: null, key: null, clients: [],
+  cfg: null, players: {}, seenEv: new Set(),
+  pos: null, geoErr: null, geoWatch: null, centered: false,
+  lastPub: 0, caughtAt: null, caughtBy: null, ping: null, restored: false,
+  snaps: {}, lastIdx: null, toasted: new Set(),
+  drawing: false, draft: [], confirm: null, sheetMin: false,
+  sound: LS.get('mh_sound') !== '0', endedFor: null, lastSheet: ''
+};
+
+// ---------- Krypto (Raum-Code = Schlüssel) ----------
+async function deriveKeys(code) {
+  const enc = new TextEncoder();
+  const k = await crypto.subtle.digest('SHA-256', enc.encode('manhunt1|key|' + code));
+  S.key = await crypto.subtle.importKey('raw', k, 'AES-GCM', false, ['encrypt', 'decrypt']);
+  const t = await crypto.subtle.digest('SHA-256', enc.encode('manhunt1|topic|' + code));
+  S.T = 'mhunt1/' + hex(t).slice(0, 24);
+}
+async function seal(obj) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, S.key, new TextEncoder().encode(JSON.stringify(obj))));
+  const out = new Uint8Array(12 + ct.length); out.set(iv); out.set(ct, 12);
+  return b64(out);
+}
+async function unseal(str) {
+  try {
+    const u = unb64(str); if (u.length < 13) return null;
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: u.slice(0, 12) }, S.key, u.slice(12));
+    return JSON.parse(new TextDecoder().decode(pt));
+  } catch (e) { return null; }
+}
+
+// ---------- Netzwerk ----------
+function connect() {
+  disconnect();
+  if (!window.mqtt) { toast('Verbindungsbibliothek nicht geladen. Seite neu laden.', 'hunter'); return; }
+  S.clients = BROKERS.map(url => {
+    const c = mqtt.connect(url, { clientId: 'mh_' + rid(10), clean: true, keepalive: 30, reconnectPeriod: 3000, connectTimeout: 10000, protocolVersion: 4 });
+    c.on('connect', () => {
+      c.subscribe(S.T + '/#', { qos: 1 });
+      renderHud();
+      setTimeout(() => { pubMe(true); if (isHost() && S.cfg) pub('/cfg', S.cfg, true); }, 400);
+    });
+    ['close', 'offline', 'reconnect'].forEach(ev => c.on(ev, renderHud));
+    c.on('error', () => {});
+    c.on('message', (topic, payload) => onMsg(topic, payload.toString()));
+    return c;
+  });
+}
+function disconnect() { S.clients.forEach(c => { try { c.end(true); } catch (e) {} }); S.clients = []; }
+const netOk = () => S.clients.some(c => c.connected);
+
+async function pub(sub, obj, retain) {
+  if (!S.T) return;
+  const payload = obj == null ? '' : await seal(obj);
+  S.clients.forEach(c => { if (c.connected) c.publish(S.T + sub, payload, { qos: 1, retain: !!retain }); });
+}
+
+async function onMsg(topic, str) {
+  if (!S.T || !topic.startsWith(S.T)) return;
+  const sub = topic.slice(S.T.length);
+  if (sub.startsWith('/p/')) {
+    const id = sub.slice(3);
+    if (!str) { if (id !== me.id) { delete S.players[id]; render(); } return; }
+    const o = await unseal(str); if (!o || o.id !== id) return;
+    const cur = S.players[id];
+    if (cur && cur.u >= o.u) return;
+    S.players[id] = o;
+    if (id === me.id && !S.restored) {
+      S.restored = true;
+      if (S.caughtAt == null && o.caughtAt) { S.caughtAt = o.caughtAt; S.caughtBy = o.caughtBy || null; }
+      if (!S.ping && o.ping) S.ping = o.ping;
+    }
+    if (id !== me.id) noteCatch(o);
+    render();
+  } else if (sub === '/cfg') {
+    if (!str) return;
+    const o = await unseal(str); if (!o) return;
+    if (S.cfg && S.cfg.rev >= o.rev) return;
+    const prev = S.cfg; S.cfg = o; onCfg(prev); render();
+  } else if (sub === '/ev') {
+    const o = await unseal(str); if (!o || S.seenEv.has(o.id)) return;
+    S.seenEv.add(o.id);
+    if (now() - o.t > 120000) return;
+    const ph = phase();
+    if (o.type === 'catchreq' && o.to === me.id && role(me.id) === 'runner' && (ph === 'hunt' || ph === 'head')) showCatchReq(o);
+  }
+}
+
+function myRecord() {
+  const p = S.pos || {};
+  return { id: me.id, name: me.name, lat: p.lat ?? null, lng: p.lng ?? null, acc: p.acc ?? null, t: p.t ?? null, caughtAt: S.caughtAt, caughtBy: S.caughtBy, ping: S.ping, u: now() };
+}
+function pubMe(force) {
+  if (!S.T) return;
+  if (!force && now() - S.lastPub < 4000) return;
+  S.lastPub = now();
+  pub('/p/' + me.id, myRecord(), true);
+}
+function pubCfg(next) {
+  next.rev = Math.max(now(), (S.cfg?.rev || 0) + 1);
+  const prev = S.cfg; S.cfg = next; onCfg(prev);
+  pub('/cfg', next, true);
+  render();
+}
+
+// ---------- Spiel-Logik ----------
+const isHost = () => !!S.cfg && S.cfg.host === me.id;
+function allPlayers() {
+  const out = { ...S.players };
+  if (S.T) out[me.id] = { ...myRecord(), u: now() };
+  return out;
+}
+function present() {
+  const ps = allPlayers(), lobby = !S.cfg || S.cfg.status === 'lobby';
+  return Object.values(ps).filter(p => p.id === me.id || !lobby || now() - p.u < 15 * 60000);
+}
+const baseRole = id => S.cfg?.roles?.[id] || 'hunter';
+function caughtTime(id) {
+  const p = id === me.id ? { caughtAt: S.caughtAt } : S.players[id];
+  const c = S.cfg;
+  if (!p || !p.caughtAt || !c || !c.startAt || p.caughtAt < c.startAt) return null;
+  return p.caughtAt;
+}
+function role(id) {
+  if (baseRole(id) !== 'runner') return 'hunter';
+  const ph = phase();
+  if (ph === 'lobby' || ph === 'none') return 'runner';
+  return caughtTime(id) ? 'hunter' : 'runner';
+}
+function times() {
+  const c = S.cfg; if (!c || !c.startAt) return null;
+  const st = c.settings;
+  const headEnd = c.startAt + st.head * 60000;
+  const endAt = headEnd + st.dur * 60000;
+  const iv = st.ping * 60000;
+  return { start: c.startAt, headEnd, endAt, iv };
+}
+function origRunners() { return present().filter(p => baseRole(p.id) === 'runner'); }
+function runnersLeft(at) {
+  return origRunners().filter(p => { const ct = caughtTime(p.id); return !ct || (at && ct > at); });
+}
+function phase() {
+  const c = S.cfg; if (!c) return 'none';
+  if (c.status === 'lobby') return 'lobby';
+  if (c.status === 'ended') return 'ended';
+  const t = times(); const n = now();
+  if (n >= t.endAt) return 'ended';
+  if (origRunners().length > 0 && runnersLeft().length === 0) return 'ended';
+  return n < t.headEnd ? 'head' : 'hunt';
+}
+function pingIdx() {
+  const t = times(); if (!t) return -1;
+  const n = Math.min(now(), t.endAt);
+  if (n < t.headEnd) return -1;
+  return Math.floor((n - t.headEnd) / t.iv);
+}
+function sighting(r) {
+  const idx = pingIdx(); if (idx < 0) return null;
+  if (r.ping && r.ping.i === idx && r.ping.s === S.cfg.startAt) return r.ping;
+  const sn = S.snaps[r.id]; if (sn && sn.i === idx) return sn;
+  if (r.ping && r.ping.s === S.cfg.startAt) return r.ping;
+  return sn || null;
+}
+
+function onCfg(prev) {
+  const c = S.cfg;
+  const prevStart = prev?.startAt;
+  if (c.status === 'running' && c.startAt !== prevStart) {
+    S.snaps = {}; S.lastIdx = null; S.endedFor = null;
+    if (S.caughtAt && S.caughtAt < c.startAt) { S.caughtAt = null; S.caughtBy = null; }
+    if (S.ping && S.ping.s !== c.startAt) S.ping = null;
+    if (prev && prev.status === 'lobby') {
+      const r = baseRole(me.id);
+      toast(r === 'runner' ? 'Spiel läuft. Du bist Runner, lauf!' : 'Spiel läuft. Du bist Jäger.', r);
+      beep([[660, .12], [880, .2]]); buzz([200, 100, 200]);
+    }
+    pubMe(true);
+  }
+  if (c.status === 'lobby' && prev && prev.status !== 'lobby') {
+    S.caughtAt = null; S.caughtBy = null; S.ping = null; S.snaps = {}; pubMe(true);
+  }
+  if (S.drawing && !isHost()) S.drawing = false;
+}
+
+function noteCatch(o) {
+  const c = S.cfg; if (!c || !c.startAt || !o.caughtAt || o.caughtAt < c.startAt) return;
+  const k = o.id + ':' + o.caughtAt; if (S.toasted.has(k)) return;
+  S.toasted.add(k);
+  if (now() - o.caughtAt > 60000) return;
+  const by = o.caughtBy && S.players[o.caughtBy] ? ' von ' + S.players[o.caughtBy].name : '';
+  toast(o.name + ' wurde gefangen' + by + '!', 'hunter');
+  beep([[520, .12], [390, .25]]); buzz(300);
+}
+
+function tickGame() {
+  const ph = phase();
+  if (ph === 'head' || ph === 'hunt') {
+    const idx = pingIdx(), t = times();
+    if (S.lastIdx === null) {
+      S.lastIdx = idx;
+      if (idx >= 0) snapAll(idx, t, true);
+    } else if (idx > S.lastIdx) {
+      S.lastIdx = idx;
+      snapAll(idx, t, false);
+      if (role(me.id) === 'runner') {
+        toast('Ping! Die Jäger sehen jetzt deinen Standort.', 'runner');
+        beep([[300, .25]]); buzz([400]);
+      } else {
+        toast('Ping! Neue Runner-Positionen.', 'hunter');
+        beep([[880, .1], [880, .1], [1175, .22]]); buzz([150, 80, 150, 80, 250]);
+      }
+      render();
+    }
+  }
+  if (ph === 'ended' && S.cfg && S.endedFor !== S.cfg.startAt) {
+    S.endedFor = S.cfg.startAt;
+    const win = winner();
+    const endT = S.cfg.endedAt || times().endAt;
+    if (now() - endT < 60000) {
+      toast(win === 'hunter' ? 'Spiel vorbei. Die Jäger gewinnen!' : 'Spiel vorbei. Die Runner gewinnen!', win);
+      beep([[523, .15], [659, .15], [784, .3]]); buzz([300, 100, 300]);
+    }
+    if (isHost() && S.cfg.status === 'running') {
+      pubCfg({ ...S.cfg, status: 'ended', endedAt: Math.min(now(), times().endAt) });
+    }
+    render();
+  }
+}
+function snapAll(idx, t, initial) {
+  const pt = t.headEnd + idx * t.iv;
+  if (role(me.id) === 'runner' && S.pos) {
+    if (!S.ping || S.ping.i !== idx || S.ping.s !== S.cfg.startAt) {
+      S.ping = { i: idx, s: S.cfg.startAt, lat: S.pos.lat, lng: S.pos.lng, t: S.pos.t };
+      pubMe(true);
+    }
+  }
+  for (const r of Object.values(S.players)) {
+    if (r.id === me.id || role(r.id) !== 'runner' || r.lat == null) continue;
+    if (initial && r.t > pt + 15000) continue;
+    S.snaps[r.id] = { i: idx, lat: r.lat, lng: r.lng, t: r.t };
+  }
+}
+function winner() {
+  const c = S.cfg, t = times();
+  const at = c.status === 'ended' && c.endedAt ? c.endedAt : t.endAt;
+  return runnersLeft(at).length === 0 && origRunners().length > 0 ? 'hunter' : 'runner';
+}
+
+// ---------- Aktionen ----------
+async function enterRoom(code, create) {
+  const name = $('#nameIn').value.trim();
+  if (!name) { showStartErr('Gib zuerst deinen Namen ein.'); $('#nameIn').focus(); return; }
+  if (!/^[A-Z0-9]{5}$/.test(code)) { showStartErr('Der Code hat 5 Zeichen.'); return; }
+  if (!window.isSecureContext || !crypto.subtle) { showStartErr('Die Seite muss über https:// geöffnet werden.'); return; }
+  me.name = name; LS.set('mh_name', name);
+  unlockAudio();
+  await joinRoom(code);
+  if (create) {
+    pubCfg({ host: me.id, status: 'lobby', settings: { ...DEF_SETTINGS }, roles: {}, startAt: null, rev: 0 });
+  } else {
+    setTimeout(() => { if (!S.cfg && S.code === code) toast('Noch kein Spiel mit Code ' + code + ' gefunden. Stimmt der Code?', 'hunter'); }, 8000);
+  }
+}
+async function joinRoom(code) {
+  S.code = code; LS.set('mh_room', code);
+  S.cfg = null; S.players = {}; S.snaps = {}; S.lastIdx = null; S.restored = false; S.endedFor = null;
+  S.caughtAt = null; S.caughtBy = null; S.ping = null;
+  await deriveKeys(code);
+  try { history.replaceState(null, '', '#' + code); } catch (e) {}
+  $('#start').hidden = true; $('#hud').hidden = false; $('#sheet').hidden = false; $('#fab').hidden = false;
+  setTimeout(() => map.invalidateSize(), 50);
+  connect(); startGeo(); keepAwake();
+  render();
+}
+function leave() {
+  pub('/p/' + me.id, null, true);
+  setTimeout(() => {
+    disconnect();
+    if (S.geoWatch != null) navigator.geolocation.clearWatch(S.geoWatch);
+    S.geoWatch = null; S.code = null; S.T = null; S.cfg = null; S.players = {};
+    LS.del('mh_room');
+    try { history.replaceState(null, '', location.pathname); } catch (e) {}
+    $('#start').hidden = false; $('#hud').hidden = true; $('#sheet').hidden = true; $('#fab').hidden = true;
+    S.confirm = null; dyn.clearLayers(); if (meMk) { meMk.remove(); meMk = null; }
+  }, 500);
+}
+function startGame() {
+  pubCfg({ ...S.cfg, status: 'running', startAt: now(), endedAt: null });
+}
+function endGame() { pubCfg({ ...S.cfg, status: 'ended', endedAt: now() }); }
+function newRound() { pubCfg({ ...S.cfg, status: 'lobby', startAt: null, endedAt: null }); }
+function toggleRole(id) {
+  const roles = { ...(S.cfg.roles || {}) };
+  roles[id] = baseRole(id) === 'runner' ? 'hunter' : 'runner';
+  pubCfg({ ...S.cfg, roles });
+}
+function randomRunner() {
+  const ps = present(); if (!ps.length) return;
+  const pick = ps[Math.floor(Math.random() * ps.length)];
+  const roles = {}; ps.forEach(p => roles[p.id] = p.id === pick.id ? 'runner' : 'hunter');
+  pubCfg({ ...S.cfg, roles });
+}
+function setSetting(k, v) { pubCfg({ ...S.cfg, settings: { ...S.cfg.settings, [k]: v } }); }
+function sendCatch(id) {
+  const p = S.players[id];
+  pub('/ev', { id: rid(12), type: 'catchreq', from: me.id, fromName: me.name, to: id, t: now() }, false);
+  toast('Anfrage an ' + (p ? p.name : 'Runner') + ' gesendet. Er/sie muss bestätigen.', 'hunter');
+}
+function beCaught(by) {
+  S.caughtAt = now(); S.caughtBy = by || null; S.ping = null;
+  pubMe(true);
+  toast('Du wurdest gefangen. Jetzt bist du Jäger!', 'hunter');
+  beep([[440, .15], [330, .3]]); buzz([300, 100, 300]);
+  render();
+}
+function showCatchReq(o) {
+  const box = $('#modalBox');
+  box.innerHTML = `<div class="big hunter">Gefangen?</div>
+    <div><b>${esc(o.fromName || 'Ein Jäger')}</b> sagt, er hat dich gefangen. Stimmt das?</div>
+    <div class="row"><button class="btn red" id="mYes" style="flex:1">Ja, gefangen</button><button class="btn" id="mNo" style="flex:1">Nein</button></div>`;
+  $('#modal').hidden = false;
+  beep([[700, .1], [700, .1]]); buzz([200, 100, 200]);
+  $('#mYes').onclick = () => { $('#modal').hidden = true; beCaught(o.from); };
+  $('#mNo').onclick = () => { $('#modal').hidden = true; };
+}
+
+// ---------- Geräte ----------
+let AC = null;
+function unlockAudio() {
+  try {
+    if (navigator.audioSession) navigator.audioSession.type = 'playback';
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    AC.resume();
+    const o = AC.createOscillator(), g = AC.createGain(); g.gain.value = 0.0001; o.connect(g).connect(AC.destination); o.start(); o.stop(AC.currentTime + 0.05);
+  } catch (e) {}
+}
+function beep(pattern) {
+  if (!S.sound || !AC) return;
+  try {
+    AC.resume();
+    let t = AC.currentTime + 0.02;
+    for (const [f, d] of pattern) {
+      const o = AC.createOscillator(), g = AC.createGain();
+      o.type = 'square'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.22, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      o.connect(g).connect(AC.destination); o.start(t); o.stop(t + d + 0.03); t += d + 0.06;
+    }
+  } catch (e) {}
+}
+function buzz(p) { try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) {} }
+
+let WL = null, wakeTried = false;
+async function keepAwake() {
+  wakeTried = true;
+  try {
+    if ('wakeLock' in navigator && document.visibilityState === 'visible' && !WL) {
+      WL = await navigator.wakeLock.request('screen');
+      WL.addEventListener('release', () => { WL = null; renderHud(); });
+    }
+  } catch (e) { WL = null; }
+  renderHud();
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && S.T) { keepAwake(); pubMe(true); if (AC) AC.resume(); }
+});
+
+function startGeo() {
+  if (!navigator.geolocation) { S.geoErr = 'Dein Browser kann keinen Standort liefern.'; renderHud(); return; }
+  if (S.geoWatch != null) return;
+  S.geoWatch = navigator.geolocation.watchPosition(p => {
+    S.pos = { lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy), t: now() };
+    S.geoErr = null;
+    if (!S.centered) { map.setView([S.pos.lat, S.pos.lng], 17); S.centered = true; }
+    pubMe(false);
+    render();
+  }, e => {
+    S.geoErr = e.code === 1
+      ? 'Standort blockiert. iPhone: Einstellungen › Datenschutz › Ortungsdienste › Safari-Websites › „Beim Verwenden“. Dann Seite neu laden.'
+      : 'Kein GPS-Signal. Geh ins Freie oder warte kurz.';
+    renderHud();
+  }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 });
+}
+
+// ---------- Karte ----------
+const map = L.map('map', { zoomControl: false, attributionControl: true }).setView([51.1, 10.4], 6);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+map.attributionControl.setPosition('topleft').setPrefix(false);
+const dyn = L.layerGroup().addTo(map);
+let meMk = null, meAcc = null;
+map.on('click', e => {
+  if (!S.drawing) return;
+  S.draft.push([+e.latlng.lat.toFixed(6), +e.latlng.lng.toFixed(6)]);
+  render();
+});
+
+function renderMap() {
+  dyn.clearLayers();
+  const ph = phase();
+  const myRole = ph === 'lobby' || ph === 'none' ? baseRole(me.id) : role(me.id);
+  // Spielfeld
+  const area = S.drawing ? S.draft : (S.cfg?.settings?.area || []);
+  if (area.length >= 3) L.polygon(area, { color: COL.accent, weight: 2, dashArray: S.drawing ? '6 6' : null, fillOpacity: .05, interactive: false }).addTo(dyn);
+  else if (area.length === 2) L.polyline(area, { color: COL.accent, weight: 2, dashArray: '6 6', interactive: false }).addTo(dyn);
+  if (S.drawing) area.forEach(pt => L.marker(pt, { icon: L.divIcon({ className: '', html: '<div class="mk-v"></div>', iconSize: [12, 12] }), interactive: false }).addTo(dyn));
+  // Ich
+  if (S.pos) {
+    const ll = [S.pos.lat, S.pos.lng];
+    const cls = 'mk-me ' + (ph === 'lobby' ? '' : myRole);
+    if (!meMk) {
+      meAcc = L.circle(ll, { radius: S.pos.acc || 10, color: COL.accent, weight: 1, fillOpacity: .06, interactive: false }).addTo(map);
+      meMk = L.marker(ll, { icon: L.divIcon({ className: '', html: `<div class="${cls}"></div>`, iconSize: [20, 20] }), zIndexOffset: 1000, interactive: false }).addTo(map);
+      meMk._cls = cls;
+    } else {
+      meMk.setLatLng(ll); meAcc.setLatLng(ll).setRadius(S.pos.acc || 10);
+      if (meMk._cls !== cls) { meMk.setIcon(L.divIcon({ className: '', html: `<div class="${cls}"></div>`, iconSize: [20, 20] })); meMk._cls = cls; }
+    }
+  }
+  // Andere
+  for (const p of present()) {
+    if (p.id === me.id) continue;
+    const r = role(p.id);
+    const showLive = ph === 'lobby' || ph === 'ended' || (r === myRole);
+    if (showLive && p.lat != null) {
+      const stale = now() - p.u > STALE_MS;
+      L.marker([p.lat, p.lng], { icon: L.divIcon({ className: '', html: `<div class="mk ${r}${stale ? ' stale' : ''}"><span>${esc((p.name || '?')[0].toUpperCase())}</span></div>`, iconSize: [22, 22] }), interactive: false })
+        .bindTooltip(esc(p.name), { permanent: true, direction: 'right', offset: [12, 0], className: 'nm' }).addTo(dyn);
+    } else if (myRole === 'hunter' && r === 'runner' && ph === 'hunt') {
+      const s = sighting(p); if (!s || s.lat == null) continue;
+      L.marker([s.lat, s.lng], { icon: L.divIcon({ className: '', html: '<div class="mk-ping"><i></i></div>', iconSize: [26, 26] }), interactive: false })
+        .bindTooltip(esc(p.name) + ' · ' + ago(s.t), { permanent: true, direction: 'right', offset: [14, 0], className: 'nm' }).addTo(dyn);
+    }
+  }
+}
+
+// ---------- Oberfläche ----------
+function renderHud() {
+  if (!S.T) return;
+  const ph = phase(), t = times();
+  const myRole = ph === 'lobby' || ph === 'none' ? null : role(me.id);
+  const pill = $('#rolePill');
+  pill.className = 'pill ' + (myRole || 'lobby');
+  pill.textContent = myRole === 'runner' ? 'Runner' : myRole === 'hunter' ? 'Jäger' : 'Lobby';
+  let clock = '--:--', lbl = 'Warte auf Start';
+  if (ph === 'none') lbl = 'Verbinde …';
+  if (ph === 'head') { clock = mmss(t.headEnd - now()); lbl = myRole === 'runner' ? 'Vorsprung' : 'Jagd startet in'; }
+  if (ph === 'hunt') { clock = mmss(t.endAt - now()); lbl = 'Restzeit'; }
+  if (ph === 'ended') { clock = 'ENDE'; lbl = winner() === 'hunter' ? 'Jäger gewinnen' : 'Runner gewinnen'; }
+  $('#clock').textContent = clock; $('#clockLbl').textContent = lbl;
+  const pb = $('#pingBox');
+  if (ph === 'hunt') {
+    const idx = pingIdx(); const next = t.headEnd + (idx + 1) * t.iv;
+    const left = Math.min(next, t.endAt) - now();
+    pb.hidden = false; $('#pingTxt').textContent = next > t.endAt ? '—' : mmss(left);
+    $('#pingRing').style.strokeDashoffset = String(100.5 * (1 - Math.max(0, Math.min(1, left / t.iv))));
+  } else if (ph === 'head') {
+    pb.hidden = false; $('#pingTxt').textContent = mmss(t.headEnd - now()); $('#pingRing').style.strokeDashoffset = '0';
+  } else pb.hidden = true;
+  // Status
+  const ok = netOk();
+  $('#dNet').className = 'dot ' + (ok ? 'ok' : 'bad'); $('#tNet').textContent = ok ? 'Online' : 'Offline';
+  const g = S.pos && now() - S.pos.t < 30000;
+  $('#dGps').className = 'dot ' + (S.geoErr ? 'bad' : g ? (S.pos.acc > 40 ? 'mid' : 'ok') : 'mid');
+  $('#tGps').textContent = g ? 'GPS ±' + S.pos.acc + ' m' : 'GPS …';
+  $('#dWake').className = 'dot ' + (WL ? 'ok' : 'mid'); $('#tWake').textContent = WL ? 'Display an' : 'Auto-Sperre?';
+  // Warnungen
+  const al = [];
+  if (S.geoErr) al.push(['bad', S.geoErr]);
+  if (!ok && S.clients.length) al.push(['bad', 'Keine Verbindung zum Server. Prüfe dein mobiles Internet.']);
+  const area = S.cfg?.settings?.area || [];
+  if (S.pos && area.length >= 3 && (ph === 'head' || ph === 'hunt') && !inPoly(S.pos, area)) {
+    al.push(['bad', 'Du bist außerhalb des Spielfelds! Geh zurück.']);
+    if (now() - (S.lastOob || 0) > 15000) { S.lastOob = now(); beep([[200, .3], [200, .3]]); buzz([500, 200, 500]); }
+  }
+  if (wakeTried && !WL && (ph === 'head' || ph === 'hunt')) al.push(['', 'Bildschirm muss anbleiben. Stell die Auto-Sperre auf „Nie“.']);
+  const html = al.map(([c, m]) => `<div class="alert ${c}">${esc(m)}</div>`).join('');
+  if ($('#alerts')._h !== html) { $('#alerts').innerHTML = html; $('#alerts')._h = html; }
+}
+
+function plRow(p, opts = {}) {
+  const r = opts.role || role(p.id);
+  const isMe = p.id === me.id;
+  const stale = !isMe && now() - p.u > STALE_MS;
+  const subTxt = opts.sub != null ? opts.sub : (isMe ? 'Du' : stale ? 'Kein Signal ' + ago(p.u) : 'Online');
+  return `<${opts.btn ? 'button' : 'div'} class="pl ${r}${opts.out ? ' out' : ''}" ${opts.btn ? `data-act="${opts.btn}" data-id="${esc(p.id)}"` : ''}>
+    <i class="ic"></i>
+    <span class="nm">${esc(p.name || '?')}${p.id === S.cfg?.host ? ' ★' : ''}<span class="sub">${esc(subTxt)}</span></span>
+    ${opts.right ?? `<span class="tag">${r === 'runner' ? 'Runner' : 'Jäger'}</span>`}
+  </${opts.btn ? 'button' : 'div'}>`;
+}
+
+function stepper(k, val, unit, opts) {
+  const host = isHost();
+  return `<div class="set"><div>${opts.label}</div>${host
+    ? `<div class="step"><button data-act="dec" data-k="${k}" aria-label="weniger">−</button><b>${val} ${unit}</b><button data-act="inc" data-k="${k}" aria-label="mehr">+</button></div>`
+    : `<b style="font-family:var(--display)">${val} ${unit}</b>`}</div>`;
+}
+
+function renderSheet() {
+  if (!S.T) return;
+  const ph = phase(); const host = isHost(); let h = '';
+  const ps = present().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+  if (ph === 'none') {
+    h = `<div class="sec keep"><div class="h">Raum ${esc(S.code)}</div><div class="note">Verbinde mit dem Spiel …</div></div>
+      <button class="btn ghost wide" data-act="leave">Zurück</button>`;
+  } else if (S.drawing) {
+    h = `<div class="sec keep"><div class="h">Spielfeld zeichnen <span>${S.draft.length} Ecken</span></div>
+      <div class="note">Tippe auf die Karte, um Ecken zu setzen. Oder lauf zur Ecke und tippe „Mein Standort“.</div>
+      <div class="row"><button class="btn sm" data-act="vHere">Mein Standort</button><button class="btn sm" data-act="vUndo" ${S.draft.length ? '' : 'disabled'}>Rückgängig</button><button class="btn sm" data-act="vClear" ${S.draft.length ? '' : 'disabled'}>Löschen</button></div>
+      <div class="row"><button class="btn pri" style="flex:1" data-act="vDone" ${S.draft.length === 0 || S.draft.length >= 3 ? '' : 'disabled'}>Fertig</button><button class="btn ghost" data-act="vCancel">Abbrechen</button></div></div>`;
+  } else if (ph === 'lobby') {
+    const st = S.cfg.settings; const runners = ps.filter(p => baseRole(p.id) === 'runner').length; const hunters = ps.length - runners;
+    const canStart = runners >= 1 && hunters >= 1;
+    h += `<div class="sec keep"><div class="h">Raum-Code <span>${ps.length} Spieler</span></div>
+      <div class="code"><b>${esc(S.code)}</b><button class="btn sm" data-act="share">Einladen</button></div></div>`;
+    h += `<div class="sec"><div class="h">Spieler${host ? ' <span>Tippen = Rolle wechseln</span>' : ''}</div><div class="list">
+      ${ps.map(p => plRow(p, { role: baseRole(p.id), btn: host ? 'role' : null })).join('')}</div>
+      ${host ? `<button class="btn sm" data-act="rand">Zufälligen Runner wählen</button>` : ''}</div>`;
+    h += `<div class="sec"><div class="h">Regeln</div><div>
+      ${stepper('ping', st.ping, 'min', { label: 'Ping alle' })}
+      ${stepper('head', st.head, 'min', { label: 'Vorsprung Runner' })}
+      ${stepper('dur', st.dur, 'min', { label: 'Spieldauer' })}
+      <div class="set"><div>Spielfeld</div>${host
+        ? `<button class="btn sm" data-act="draw">${st.area.length >= 3 ? st.area.length + ' Ecken · ändern' : 'Zeichnen'}</button>`
+        : `<b style="font-family:var(--display)">${st.area.length >= 3 ? st.area.length + ' Ecken' : 'Keins'}</b>`}</div></div></div>`;
+    if (host) h += `<button class="btn pri wide keep" data-act="start" ${canStart ? '' : 'disabled'}>Spiel starten</button>
+      ${canStart ? '' : '<div class="note">Mindestens ein Runner und ein Jäger nötig.</div>'}`;
+    else h += `<div class="note keep">Warte, bis der Host das Spiel startet. Deine Rolle: <b>${baseRole(me.id) === 'runner' ? 'Runner' : 'Jäger'}</b></div>`;
+    h += `<button class="btn ghost wide" data-act="leave">Raum verlassen</button>`;
+  } else if (ph === 'head' || ph === 'hunt') {
+    const my = role(me.id);
+    const left = runnersLeft();
+    h += `<div class="sec keep"><div class="h"><span>${ph === 'head' ? 'Vorsprung läuft' : 'Jagd läuft'}</span><span>${left.length} von ${origRunners().length} Runnern frei</span></div></div>`;
+    const runners = ps.filter(p => role(p.id) === 'runner');
+    const hunters = ps.filter(p => role(p.id) === 'hunter');
+    if (my === 'hunter') {
+      h += `<div class="sec keep"><div class="h">Runner</div><div class="list">${runners.map(p => {
+        const s = ph === 'hunt' ? sighting(p) : null;
+        const d = s && S.pos ? haversine(S.pos, s) : null;
+        const sub = ph === 'head' ? 'Versteckt sich …' : s ? fmtDist(d) + (d != null ? ' · ' : '') + 'Ping ' + ago(s.t) : 'Noch kein Ping';
+        const cf = S.confirm === 'catch:' + p.id;
+        return plRow(p, { sub, right: ph === 'hunt' ? `<button class="btn ${cf ? 'red' : ''} sm" data-act="${cf ? 'catchGo' : 'catch'}" data-id="${esc(p.id)}">${cf ? 'Senden' : 'Gefangen'}</button>` : '' });
+      }).join('') || '<div class="note">Keine Runner mehr.</div>'}</div></div>`;
+      h += `<div class="sec"><div class="h">Jäger-Team</div><div class="list">${hunters.map(p => plRow(p, {
+        sub: p.id === me.id ? 'Du' : (now() - p.u > STALE_MS ? 'Kein Signal ' + ago(p.u) : S.pos && p.lat != null ? fmtDist(haversine(S.pos, p)) + ' entfernt' : 'Online')
+      })).join('')}</div></div>`;
+    } else {
+      h += `<div class="sec keep"><div class="note">Die Jäger sehen deinen Standort nur beim Ping. Bleib im Spielfeld und lass den Bildschirm an.</div></div>`;
+      if (runners.length > 1) h += `<div class="sec"><div class="h">Dein Team</div><div class="list">${runners.map(p => plRow(p, {
+        sub: p.id === me.id ? 'Du' : S.pos && p.lat != null ? fmtDist(haversine(S.pos, p)) + ' entfernt' : 'Online'
+      })).join('')}</div></div>`;
+      h += S.confirm === 'caught'
+        ? `<div class="confirm"><div>Wirklich gefangen? Du wirst dann Jäger.</div><div class="row"><button class="btn red" style="flex:1" data-act="caughtGo">Ja, gefangen</button><button class="btn" data-act="cancel">Nein</button></div></div>`
+        : `<button class="btn wide" data-act="caught">Ich wurde gefangen</button>`;
+    }
+    if (host) h += S.confirm === 'end'
+      ? `<div class="confirm"><div>Spiel für alle beenden?</div><div class="row"><button class="btn red" style="flex:1" data-act="endGo">Beenden</button><button class="btn" data-act="cancel">Abbrechen</button></div></div>`
+      : `<button class="btn ghost wide" data-act="end">Spiel beenden</button>`;
+  } else if (ph === 'ended') {
+    const win = winner(); const t = times();
+    const at = S.cfg.endedAt || t.endAt;
+    h += `<div class="sec keep"><div class="big ${win}">${win === 'hunter' ? 'Jäger gewinnen' : 'Runner gewinnen'}</div>
+      <div class="note">Spielzeit ${mmss(Math.max(0, at - t.headEnd))}</div></div>`;
+    h += `<div class="sec"><div class="h">Runner</div><div class="list">${origRunners().map(p => {
+      const ct = caughtTime(p.id); const caught = ct && ct <= at;
+      const by = caught && (p.id === me.id ? S.caughtBy : p.caughtBy);
+      const byN = by ? (by === me.id ? me.name : S.players[by]?.name) : null;
+      return plRow(p, { role: 'runner', out: caught, sub: caught ? 'Gefangen nach ' + mmss(ct - t.headEnd) + (byN ? ' von ' + byN : '') : 'Entkommen', right: `<span class="tag">${caught ? 'Gefangen' : 'Frei'}</span>` });
+    }).join('')}</div></div>`;
+    h += host ? `<button class="btn pri wide keep" data-act="again">Neue Runde</button>` : `<div class="note keep">Der Host kann eine neue Runde starten.</div>`;
+    h += `<button class="btn ghost wide" data-act="leave">Raum verlassen</button>`;
+  }
+  if (S.confirm === 'leave') h = h.replace('<button class="btn ghost wide" data-act="leave">Raum verlassen</button>',
+    `<div class="confirm"><div>Raum wirklich verlassen?</div><div class="row"><button class="btn red" style="flex:1" data-act="leaveGo">Verlassen</button><button class="btn" data-act="cancel">Bleiben</button></div></div>`);
+  if (h !== S.lastSheet) { $('#sheetBody').innerHTML = h; S.lastSheet = h; }
+  $('#sheet').classList.toggle('min', S.sheetMin);
+  document.documentElement.style.setProperty('--sheet-h', $('#sheet').offsetHeight + 'px');
+}
+
+function render() { renderHud(); renderSheet(); renderMap(); }
+
+// Klicks im Panel
+$('#sheetBody').addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b || b.disabled) return;
+  const a = b.dataset.act, id = b.dataset.id, st = S.cfg?.settings;
+  switch (a) {
+    case 'share': share(); break;
+    case 'role': toggleRole(id); break;
+    case 'rand': randomRunner(); break;
+    case 'inc': case 'dec': {
+      const k = b.dataset.k, dir = a === 'inc' ? 1 : -1;
+      if (k === 'ping') { const i = Math.max(0, Math.min(PING_OPTS.length - 1, PING_OPTS.indexOf(st.ping) + dir)); setSetting('ping', PING_OPTS[i] ?? 4); }
+      if (k === 'head') setSetting('head', Math.max(0, Math.min(20, st.head + dir)));
+      if (k === 'dur') setSetting('dur', Math.max(10, Math.min(240, st.dur + dir * 10)));
+      break;
+    }
+    case 'draw': S.drawing = true; S.draft = [...(st.area || [])]; S.sheetMin = false;
+      if (S.draft.length >= 3) map.fitBounds(S.draft, { padding: [40, 40] }); break;
+    case 'vHere': if (S.pos) S.draft.push([+S.pos.lat.toFixed(6), +S.pos.lng.toFixed(6)]); else toast('Noch kein GPS-Signal.', 'hunter'); break;
+    case 'vUndo': S.draft.pop(); break;
+    case 'vClear': S.draft = []; break;
+    case 'vDone': S.drawing = false; setSetting('area', S.draft); break;
+    case 'vCancel': S.drawing = false; break;
+    case 'start': startGame(); break;
+    case 'catch': S.confirm = 'catch:' + id; break;
+    case 'catchGo': S.confirm = null; sendCatch(id); break;
+    case 'caught': S.confirm = 'caught'; break;
+    case 'caughtGo': S.confirm = null; beCaught(null); break;
+    case 'end': S.confirm = 'end'; break;
+    case 'endGo': S.confirm = null; endGame(); break;
+    case 'again': newRound(); break;
+    case 'leave': S.confirm = 'leave'; break;
+    case 'leaveGo': S.confirm = null; leave(); break;
+    case 'cancel': S.confirm = null; break;
+  }
+  render();
+});
+$('#grab').onclick = () => { S.sheetMin = !S.sheetMin; renderSheet(); };
+$('#btnCenter').onclick = () => { if (S.pos) map.setView([S.pos.lat, S.pos.lng], Math.max(map.getZoom(), 16)); else toast('Noch kein GPS-Signal.', ''); };
+function renderSoundIcon() { $('#btnSound').style.opacity = S.sound ? '1' : '.4'; }
+$('#btnSound').onclick = () => { S.sound = !S.sound; LS.set('mh_sound', S.sound ? '1' : '0'); unlockAudio(); renderSoundIcon(); toast(S.sound ? 'Ton an' : 'Ton aus', ''); if (S.sound) beep([[880, .08]]); };
+renderSoundIcon();
+
+async function share() {
+  const url = location.origin + location.pathname + '#' + S.code;
+  const text = 'Manhunt! Komm ins Spiel, Code ' + S.code;
+  try { if (navigator.share) { await navigator.share({ title: 'Manhunt', text, url }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+  try { await navigator.clipboard.writeText(text + ': ' + url); toast('Link kopiert', ''); } catch (e) { toast('Code: ' + S.code, ''); }
+}
+
+function toast(msg, kind) {
+  const el = document.createElement('div'); el.className = 'toast ' + (kind || ''); el.textContent = msg;
+  $('#toasts').appendChild(el); setTimeout(() => el.remove(), 4200);
+  while ($('#toasts').children.length > 3) $('#toasts').firstChild.remove();
+}
+function showStartErr(m) { const e = $('#startErr'); e.textContent = m; e.hidden = false; }
+
+// Start-Bildschirm
+$('#nameIn').value = me.name;
+const hashCode = (location.hash || '').replace('#', '').toUpperCase();
+if (/^[A-Z0-9]{5}$/.test(hashCode)) $('#codeIn').value = hashCode;
+$('#codeIn').addEventListener('input', e => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); });
+$('#btnCreate').onclick = () => { let c; do { c = rid(5); } while (!/[A-Z]/.test(c)); enterRoom(c, true); };
+$('#btnJoin').onclick = () => enterRoom($('#codeIn').value.trim().toUpperCase(), false);
+$('#codeIn').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btnJoin').click(); });
+
+// Nach Neuladen automatisch zurück in den Raum
+const saved = LS.get('mh_room');
+if (saved && me.name && (!hashCode || hashCode === saved)) {
+  const n = document.createElement('button'); n.className = 'btn wide'; n.textContent = 'Zurück in Raum ' + saved;
+  n.onclick = () => { $('#nameIn').value = me.name; enterRoom(saved, false); };
+  $('#btnCreate').before(n);
+}
+
+// Takt
+setInterval(() => {
+  if (!S.T) return;
+  tickGame(); renderHud();
+  document.querySelectorAll('.leaflet-tooltip').length && phase() === 'hunt' && renderMap();
+}, 1000);
+setInterval(() => { if (S.T) { pubMe(true); renderSheet(); } }, 10000);
+window.addEventListener('pagehide', () => { if (S.T) pubMe(true); });
+})();
+</script>
+</body>
+</html>
