@@ -4,181 +4,383 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Manhunt">
 <meta name="theme-color" content="#0a0e0b">
 <title>Manhunt</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Barlow+Semi+Condensed:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Barlow+Semi+Condensed:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
 <style>
-/* Layout: Vollbild-Karte, oben HUD-Leiste, unten einklappbares Panel. Ein dunkler Look. */
+/* Layout: Vollbild-Karte, Kopfzeile oben, ziehbares Panel unten (Leiste/halb/voll). Bewusst nur dunkel. */
 :root{
-  --bg:#0a0e0b; --panel:#111813; --panel2:#18221c; --line:#27362c;
-  --fg:#dbe7de; --muted:#7f978a; --accent:#9ad15b; --accent-ink:#0d1409;
-  --hunter:#ff5b4f; --runner:#ffb23f; --warn:#ffb23f; --danger:#ff5b4f;
+  --bg:#0a0e0b; --p1:#111813; --p2:#18221c; --p3:#1f2b23; --line:#2a3a2f; --line2:#33463a;
+  --fg:#e6efe8; --muted:#93aa9b; --zone:#a6d864; --zone-ink:#101807;
+  --hunter:#ff5b4f; --runner:#4db5ff; --warn:#e6cd55; --bad:#ff5b4f; --badtx:#ff8a80;
   --display:'Chakra Petch', ui-monospace, 'SF Mono', Menlo, monospace;
-  --body:'Barlow Semi Condensed', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --ui:'Barlow Semi Condensed', 'Arial Narrow', system-ui, -apple-system, sans-serif;
   --sat:env(safe-area-inset-top,0px); --sab:env(safe-area-inset-bottom,0px);
   --sal:env(safe-area-inset-left,0px); --sar:env(safe-area-inset-right,0px);
+  --sheet-h:160px; --top-h:110px; --role:var(--zone);
   color-scheme:dark;
 }
 *{box-sizing:border-box}
-html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 var(--body);overflow:hidden;-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font:16px/1.35 var(--ui);overflow:hidden;-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;overscroll-behavior:none}
 button,input{font:inherit;color:inherit}
-button{cursor:pointer;touch-action:manipulation}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button{cursor:pointer;touch-action:manipulation;border:0;background:none;padding:0}
+:focus-visible{outline:2px solid var(--zone);outline-offset:2px}
 [hidden]{display:none!important}
+.tn{font-variant-numeric:tabular-nums}
 
 /* Karte */
-#map{position:fixed;inset:0;background:#0d120f;z-index:0}
-.leaflet-container{background:#0d120f;font-family:var(--body)}
-.leaflet-tile-pane{filter:invert(1) hue-rotate(185deg) brightness(.78) contrast(.92) saturate(.35)}
-.leaflet-top{top:calc(var(--sat) + 104px)}
-.leaflet-control-attribution{background:rgba(10,14,11,.75)!important;color:var(--muted)!important;font-size:10px}
+#map{position:fixed;inset:0;z-index:0;background:#0d120f}
+.leaflet-container{background:#0d120f;font-family:var(--ui)}
+.leaflet-tile-pane{filter:invert(1) hue-rotate(185deg) brightness(.76) contrast(.92) saturate(.35)}
+.leaflet-control-attribution{background:rgba(10,14,11,.7)!important;color:var(--muted)!important;font-size:10px}
 .leaflet-control-attribution a{color:var(--muted)!important}
-.leaflet-tooltip.nm{background:rgba(10,14,11,.85);border:1px solid var(--line);color:var(--fg);font:600 12px/1.2 var(--body);padding:2px 6px;border-radius:3px;box-shadow:none}
-.leaflet-tooltip.nm::before{display:none}
+.leaflet-bottom.leaflet-left{bottom:var(--sheet-h);transition:bottom .3s}
+.mkw{width:0;height:0}
+.mkw > .mi{position:absolute;left:0;top:0;transform:translate(-50%,-50%)}
+.mp{width:28px;height:28px;border-radius:50%;border:2px solid #0a0e0b;display:grid;place-items:center;font:700 10.5px/1 var(--display);color:#0a0e0b;letter-spacing:-.02em}
+.mp.h{background:var(--hunter);box-shadow:0 0 0 2px var(--hunter)}
+.mp.r{background:var(--runner);box-shadow:0 0 0 2px var(--runner)}
+.mp.stale{opacity:.45}
+.lb{position:absolute;left:calc(100% + 7px);top:50%;transform:translateY(-50%);white-space:nowrap;background:rgba(10,14,11,.88);border:1px solid #2d3d31;padding:3px 7px;border-radius:5px;font:600 13px/1.15 var(--ui);color:var(--fg);font-style:normal}
+.lb i{font-style:normal;color:var(--muted);font-weight:500}
+.lb .bad{color:var(--badtx)}
+.mi.l .lb{left:auto;right:calc(100% + 7px)}
+.lb.new{border-color:var(--runner);color:#fff}
+.mping{width:32px;height:32px;position:relative}
+.mping > b{position:absolute;inset:9px;background:var(--runner);transform:rotate(45deg);border:2px solid #0a0e0b}
+.mping::after{content:"";position:absolute;inset:0;border:2px solid var(--runner);border-radius:50%;animation:rip 2s ease-out infinite}
+.mping.old > b{inset:12px;opacity:.55}
+.mping.old::after,.mping.mine::after{display:none}
+.mping.mine > b{background:transparent;border:2.5px dashed var(--runner)}
+.mping.lost > b{background:#6b7f72}
+.mping.lost::after{display:none}
+@keyframes rip{from{transform:scale(.45);opacity:1}to{transform:scale(2.3);opacity:0}}
+.mme{width:110px;height:110px;position:relative;display:grid;place-items:center;pointer-events:none}
+.mme .cone{position:absolute;inset:0;border-radius:50%;background:conic-gradient(from -28deg,color-mix(in srgb,var(--role) 50%,transparent) 0 56deg,transparent 56deg);-webkit-mask:radial-gradient(circle,#000 0 38%,transparent 70%);mask:radial-gradient(circle,#000 0 38%,transparent 70%)}
+.mme .dot{width:22px;height:22px;border-radius:50%;background:#fff;border:5px solid var(--role);box-shadow:0 0 0 7px color-mix(in srgb,var(--role) 22%,transparent)}
+.mv{width:12px;height:12px;background:var(--zone);border:2px solid #0a0e0b;transform:rotate(45deg)}
 
-.mk{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font:700 11px var(--display);color:#0a0e0b;border:2px solid #0a0e0b;box-shadow:0 0 0 2px currentColor}
-.mk.hunter{background:var(--hunter);color:var(--hunter)}
-.mk.runner{background:var(--runner);color:var(--runner)}
-.mk span{color:#0a0e0b}
-.mk.stale{opacity:.45}
-.mk-me{width:20px;height:20px;border-radius:50%;background:#fff;border:4px solid var(--accent);box-shadow:0 0 0 6px rgba(154,209,91,.25)}
-.mk-me.hunter{border-color:var(--hunter);box-shadow:0 0 0 6px rgba(255,91,79,.25)}
-.mk-me.runner{border-color:var(--runner);box-shadow:0 0 0 6px rgba(255,178,63,.25)}
-.mk-ping{width:26px;height:26px;position:relative}
-.mk-ping i{position:absolute;inset:7px;background:var(--runner);transform:rotate(45deg);border:2px solid #0a0e0b}
-.mk-ping::after{content:"";position:absolute;inset:0;border:2px solid var(--runner);border-radius:50%;animation:ripple 2s ease-out infinite}
-@keyframes ripple{from{transform:scale(.5);opacity:1}to{transform:scale(2.4);opacity:0}}
-.mk-v{width:12px;height:12px;background:var(--accent);border:2px solid #0a0e0b;transform:rotate(45deg)}
+/* Randmarken für Ziele außerhalb */
+#edges{position:fixed;inset:0;z-index:12;pointer-events:none}
+.edge{position:absolute;transform:translate(-50%,-50%);display:flex;align-items:center;gap:7px;padding:5px 11px 5px 5px;border-radius:999px;background:rgba(10,14,11,.94);border:1.5px solid var(--runner);font:600 14px/1 var(--ui);white-space:nowrap;color:var(--fg);pointer-events:auto;min-height:36px}
+.edge .ea{width:26px;height:26px;border-radius:50%;background:#0d130f;display:grid;place-items:center}
+.edge .ea svg{width:16px;height:16px;fill:var(--runner)}
+.edge .bad{color:var(--badtx)}
 
-/* HUD */
-#hud{position:fixed;top:0;left:0;right:0;z-index:20;padding:calc(var(--sat) + 8px) max(12px,var(--sar)) 8px max(12px,var(--sal));background:linear-gradient(var(--bg) 70%,rgba(10,14,11,0));pointer-events:none}
+/* Kopfzeile */
+#hud{position:fixed;top:0;left:0;right:0;z-index:20;padding:calc(var(--sat) + 10px) max(12px,var(--sar)) 8px max(12px,var(--sal));background:linear-gradient(rgba(9,13,10,.97) 74%,rgba(9,13,10,0));pointer-events:none}
 #hud > *{pointer-events:auto}
-.hud-row{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px}
-.pill{justify-self:start;font:700 13px/1 var(--display);letter-spacing:.12em;padding:7px 10px;border:1px solid var(--line);border-radius:3px;background:var(--panel);text-transform:uppercase}
-.pill.hunter{color:var(--hunter);border-color:rgba(255,91,79,.5)}
-.pill.runner{color:var(--runner);border-color:rgba(255,178,63,.5)}
-.pill.lobby{color:var(--accent)}
-.clock{text-align:center}
-.clock b{display:block;font:700 30px/1 var(--display);font-variant-numeric:tabular-nums;letter-spacing:.02em}
-.clock small{display:block;font:500 11px/1.2 var(--display);letter-spacing:.14em;color:var(--muted);text-transform:uppercase;margin-top:3px}
-.pingbox{justify-self:end;display:flex;align-items:center;gap:8px}
-.pingbox .lbl{text-align:right;font:500 10px/1.15 var(--display);letter-spacing:.12em;color:var(--muted);text-transform:uppercase}
-.pingbox .lbl b{display:block;font:700 15px/1.1 var(--display);color:var(--fg);letter-spacing:.02em;font-variant-numeric:tabular-nums}
-.ring{width:38px;height:38px}
-.ring circle{fill:none;stroke-width:4}
-.ring .bg{stroke:var(--line)}
-.ring .fg{stroke:var(--accent);stroke-linecap:butt;transform:rotate(-90deg);transform-origin:50% 50%;transition:stroke-dashoffset .9s linear}
-.stat{display:flex;gap:12px;justify-content:center;margin-top:8px;font:500 11px/1 var(--display);letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
-.stat span{display:flex;align-items:center;gap:5px}
-.dot{width:7px;height:7px;border-radius:50%;background:var(--muted)}
-.dot.ok{background:var(--accent)}.dot.bad{background:var(--danger)}.dot.mid{background:var(--warn)}
-#alerts{display:grid;gap:6px;margin-top:8px}
-.alert{font:600 14px/1.3 var(--body);padding:8px 10px;border-radius:3px;background:var(--panel);border-left:3px solid var(--warn)}
-.alert.bad{border-left-color:var(--danger);background:#2a1110;color:#ffd7d3}
+#hud .stripe{position:absolute;left:0;right:0;top:0;height:calc(var(--sat) + 5px);background:var(--role);pointer-events:none}
+.hrow{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin-top:4px}
+.pill{justify-self:start;font:700 14px/1 var(--display);letter-spacing:.12em;padding:8px 10px;border-radius:6px;background:var(--role);color:#140504;text-transform:uppercase}
+.pill.runner{color:#03121f}
+.pill.lobby{background:var(--p2);color:var(--zone);border:1px solid var(--line2)}
+.hero{text-align:center;display:grid;justify-items:center;gap:3px}
+.hero small{font:600 12px/1 var(--display);letter-spacing:.18em;color:var(--muted);text-transform:uppercase}
+.hero b{font:700 46px/.95 var(--display);font-variant-numeric:tabular-nums;letter-spacing:.01em}
+.hero.code b{font-size:34px;letter-spacing:.16em;color:var(--zone)}
+.hero.warn b{color:var(--runner);animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:.4}}
+.bar{display:block;width:124px;height:4px;border-radius:2px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--zone);transition:width 1s linear}
+.side{justify-self:end;text-align:right;display:grid;gap:3px}
+.side small{font:600 12px/1 var(--display);letter-spacing:.14em;color:var(--muted)}
+.side b{font:700 18px/1 var(--display);font-variant-numeric:tabular-nums}
+#pips{display:flex;justify-content:center;gap:6px;margin-top:7px;flex-wrap:wrap}
+#pips:empty{display:none}
+.pip{display:inline-flex;align-items:center;gap:5px;font:600 13px/1 var(--ui);padding:5px 8px;border-radius:999px;background:#2f2810;color:#fff3c4;border:1px solid var(--warn)}
+.pip.bad{background:#3a1210;color:#ffe1dd;border-color:var(--bad)}
+#alert:empty{display:none}
+.alert{margin-top:8px;display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:10px 12px;border-radius:10px;background:var(--p3);border:1px solid var(--line2);font:600 16px/1.25 var(--ui)}
+.alert small{display:block;font-weight:500;opacity:.88;font-size:14px}
+.alert.bad{background:#3a1210;border-color:var(--bad);color:#ffe1dd}
+.alert.warn{background:#2f2810;border-color:var(--warn);color:#fff3c4}
+.alert > svg{width:24px;height:24px}
+.ring{width:44px;height:44px;position:relative;display:grid;place-items:center;font:700 13px var(--display)}
+.ring svg{position:absolute;inset:0;width:44px;height:44px;transform:rotate(-90deg)}
+.alert .arwbox{width:36px;height:36px;display:grid;place-items:center}
+.alert .arwbox svg{width:30px;height:30px;fill:#fff;transition:transform .5s}
+
+#banner{position:fixed;left:max(12px,var(--sal));right:max(12px,var(--sar));top:calc(var(--top-h) + 6px);z-index:22;padding:12px 14px;border-radius:12px;background:var(--runner);color:#03121f;font:700 18px/1.2 var(--display);letter-spacing:.04em;display:flex;justify-content:space-between;align-items:center;gap:10px;box-shadow:0 10px 30px rgba(0,0,0,.45);animation:drop .35s ease-out}
+#banner small{font:600 14px/1.2 var(--ui);letter-spacing:0;text-align:right}
+#banner.light{background:#fff;color:#000}
+#banner.red{background:var(--bad);color:#1a0705}
+#banner.zone{background:var(--zone);color:var(--zone-ink)}
+@keyframes drop{from{transform:translateY(-14px);opacity:0}}
+#flash{position:fixed;inset:0;z-index:11;pointer-events:none;background:radial-gradient(circle at 50% 38%,color-mix(in srgb,var(--runner) 50%,transparent),transparent 62%);animation:flash 1.6s ease-out forwards}
+@keyframes flash{0%{opacity:0}12%{opacity:1}100%{opacity:0}}
+#vig{position:fixed;inset:0;z-index:13;pointer-events:none;box-shadow:inset 0 0 0 5px rgba(255,91,79,.9),inset 0 0 100px 30px rgba(255,91,79,.45);animation:vig 1.1s ease-in-out infinite}
+#vig.beat{animation:beat 1s ease-in-out infinite}
+@keyframes vig{50%{box-shadow:inset 0 0 0 5px rgba(255,91,79,.5),inset 0 0 60px 10px rgba(255,91,79,.25)}}
+@keyframes beat{0%,40%,100%{opacity:.35}12%,28%{opacity:1}}
 
 /* Kartenknöpfe */
-#fab{position:fixed;right:max(12px,var(--sar));z-index:15;display:grid;gap:8px;bottom:calc(var(--sheet-h,200px) + 12px)}
-.fab{width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--panel);display:grid;place-items:center}
-.fab svg{width:22px;height:22px;stroke:var(--fg);fill:none;stroke-width:2}
+#fab{position:fixed;right:max(12px,var(--sar));z-index:15;display:grid;gap:9px;bottom:calc(var(--sheet-h) + 12px);transition:bottom .3s}
+.fab{width:48px;height:48px;border-radius:50%;background:rgba(17,24,19,.95);border:1px solid var(--line2);display:grid;place-items:center}
+.fab svg{width:23px;height:23px;stroke:var(--fg);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.fab.on{border-color:var(--zone);box-shadow:0 0 0 1px var(--zone)}
+.fab.on svg{stroke:var(--zone)}
+.fab.off{opacity:.5}
 
-/* Panel unten */
-#sheet{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--panel);border-top:1px solid var(--line);max-height:58vh;display:flex;flex-direction:column;padding-bottom:var(--sab)}
-#sheet .grab{border:0;background:none;padding:8px 0 4px;display:grid;place-items:center;width:100%}
-#sheet .grab i{width:42px;height:4px;border-radius:2px;background:var(--line)}
-#sheetBody{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px max(16px,var(--sar)) 16px max(16px,var(--sal));display:grid;gap:14px}
-#sheet.min #sheetBody > :not(.keep){display:none}
-.sec{display:grid;gap:8px}
-.h{font:600 11px/1 var(--display);letter-spacing:.16em;text-transform:uppercase;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
-.code{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.code b{font:700 34px/1 var(--display);letter-spacing:.18em;color:var(--accent)}
-.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.btn{border:1px solid var(--line);background:var(--panel2);padding:11px 14px;border-radius:4px;font-weight:600;font-size:15px;min-height:44px}
-.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-family:var(--display);letter-spacing:.08em;text-transform:uppercase;font-size:15px}
-.btn.red{background:var(--hunter);border-color:var(--hunter);color:#1a0705;font-family:var(--display);letter-spacing:.06em;text-transform:uppercase}
+/* Panel */
+#sheet{position:fixed;left:0;right:0;bottom:0;z-index:25;background:var(--p1);border-top:1px solid #2d3d31;border-radius:18px 18px 0 0;transition:height .3s cubic-bezier(.3,.7,.2,1);display:flex;flex-direction:column;box-shadow:0 -10px 30px rgba(0,0,0,.45);height:var(--sheet-h);padding-bottom:var(--sab)}
+#grab{height:26px;display:grid;place-items:center;cursor:grab;touch-action:none;flex:none;width:100%}
+#grab i{width:46px;height:5px;border-radius:3px;background:#3b4f41}
+#sb{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 max(14px,var(--sar)) 22px max(14px,var(--sal));display:grid;gap:12px;align-content:start;grid-auto-rows:max-content;flex:1;min-height:0;overscroll-behavior:contain}
+#sheet.peek #sb{overflow:hidden}
+#sheet.peek #sb > :nth-child(n+3){visibility:hidden}
+#sheet.lobby #sb{padding-bottom:96px}
+.h{font:600 12px/1 var(--display);letter-spacing:.16em;color:var(--muted);text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.sum{display:flex;justify-content:space-between;gap:8px;font:600 14.5px/1.25 var(--ui);color:var(--muted);flex-wrap:wrap}
+.sum b{color:var(--fg)}
+.sum .bad{color:var(--badtx)}
+.note{font-size:15px;color:var(--muted)}
+.note b{color:var(--fg)}
+.targets{min-height:96px;display:flex;gap:9px;overflow-x:auto;scrollbar-width:none;margin:0 calc(-1 * max(14px,var(--sal))) 0 calc(-1 * max(14px,var(--sar)));padding:0 max(14px,var(--sar)) 0 max(14px,var(--sal))}
+.targets::-webkit-scrollbar{display:none}
+.tc{flex:none;width:168px;display:grid;grid-template-columns:auto 1fr;gap:2px 10px;align-items:center;text-align:left;padding:10px;border-radius:13px;background:var(--p2);border:1.5px solid #2d3d31;position:relative}
+.tc.sel{border-color:var(--runner);background:#0f1d27}
+.tc .arr{grid-row:span 3;width:42px;height:42px;border-radius:50%;background:#0d130f;display:grid;place-items:center}
+.tc .arr svg{width:27px;height:27px;fill:var(--runner);transition:transform .5s}
+.tc.lost .arr svg{fill:#6b7f72}
+.tc b{font:700 17px/1.1 var(--ui);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tc .d{font:700 21px/1 var(--display);font-variant-numeric:tabular-nums;white-space:nowrap}
+.tc .d small{font:600 13px var(--display);color:var(--muted);margin-left:4px}
+.tc .a{font:500 13.5px/1.15 var(--ui);color:var(--muted)}
+.tc .a.bad{color:var(--badtx);font-weight:700}
+.badge{position:absolute;top:-8px;right:8px;font:700 11px/1 var(--display);letter-spacing:.1em;background:var(--runner);color:#03121f;padding:4px 6px;border-radius:4px}
+.badge.wait{background:var(--warn);color:#1a1600}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:9px;min-height:88px}
+.tile{border-radius:13px;background:var(--p2);border:1px solid #2d3d31;padding:10px 11px;display:grid;gap:4px;text-align:left;align-content:start}
+.tile small{font:600 11.5px/1 var(--display);letter-spacing:.14em;color:var(--muted);text-transform:uppercase}
+.tile b{font:700 21px/1.05 var(--display);font-variant-numeric:tabular-nums}
+.tile > span{font:500 13.5px/1.2 var(--ui);color:var(--muted)}
+.tile.ok b{color:var(--zone)}
+.tile.bad{border-color:var(--bad);background:#2a1311}
+.tile.bad b{color:var(--badtx)}
+.list{display:grid;gap:7px}
+.row{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:9px 11px;border-radius:12px;background:var(--p2);border:1px solid #26352a;min-height:50px;text-align:left;width:100%}
+.row .dot{width:13px;height:13px;border-radius:50%}
+.row .nm{font:600 16px/1.15 var(--ui);min-width:0}
+.row .nm small{display:block;font:500 13.5px var(--ui);color:var(--muted)}
+.row .nm small.bad{color:var(--badtx);font-weight:600}
+.row .rt{font:600 14px var(--display);color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.row.off{opacity:.5}
+.log{display:grid;gap:5px;font:500 14.5px/1.3 var(--ui);color:var(--muted)}
+.log div{display:grid;grid-template-columns:46px 1fr;gap:6px}
+.log b{color:var(--fg);font-weight:600}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;min-height:54px;padding:10px 14px;border-radius:12px;font:700 16px/1.1 var(--display);letter-spacing:.07em;text-transform:uppercase;background:var(--p2);border:1px solid var(--line2);width:100%;text-align:center}
+.btn small{font:600 13px/1.15 var(--ui);letter-spacing:.01em;text-transform:none;opacity:.85}
+.btn.pri{background:var(--zone);color:var(--zone-ink);border-color:var(--zone)}
+.btn.red{background:var(--hunter);color:#1a0705;border-color:var(--hunter)}
 .btn.ghost{background:none}
-.btn.sm{min-height:36px;padding:7px 11px;font-size:14px}
-.btn.wide{width:100%}
-.btn:disabled{opacity:.45;cursor:not-allowed}
-.list{display:grid;gap:6px}
-.pl{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;padding:8px 10px;background:var(--panel2);border:1px solid var(--line);border-radius:4px;min-height:48px;text-align:left;width:100%}
-.pl .ic{width:12px;height:12px;border-radius:50%}
-.pl.hunter .ic{background:var(--hunter)}.pl.runner .ic{background:var(--runner)}
-.pl .nm{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pl .sub{display:block;font-size:13px;color:var(--muted);font-weight:500;font-variant-numeric:tabular-nums}
-.pl .tag{font:700 11px/1 var(--display);letter-spacing:.12em;text-transform:uppercase;padding:5px 7px;border-radius:3px;border:1px solid currentColor}
-.pl.hunter .tag{color:var(--hunter)}.pl.runner .tag{color:var(--runner)}
-.pl.out{opacity:.5}
-.set{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)}
+.btn.sm{min-height:42px;font-size:14px;padding:8px 12px;width:auto}
+.btn.big{min-height:66px;font-size:19px}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+.btns > .btn{flex:1;width:auto}
+.confirm{display:grid;gap:9px;padding:12px;border:1px solid var(--bad);border-radius:12px;background:#1d0f0e}
+.confirm p{margin:0;font-size:16px}
+.wait{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center;padding:12px;border-radius:12px;background:var(--p2);border:1px solid var(--line2);font:600 16px/1.25 var(--ui)}
+.wait small{display:block;color:var(--muted);font-weight:500;font-size:14px}
+.spin{width:28px;height:28px;border-radius:50%;border:3px solid var(--line2);border-top-color:var(--zone);animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.okc{width:28px;height:28px;border-radius:50%;background:var(--zone);display:grid;place-items:center;color:var(--zone-ink);font:700 16px var(--display)}
+.noc{width:28px;height:28px;border-radius:50%;background:var(--warn);display:grid;place-items:center;color:#1a1600;font:700 16px var(--display)}
+.tgl{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:12px;background:var(--p2);border:1px solid #26352a;font:600 16px var(--ui);width:100%;text-align:left}
+.tgl small{display:block;font:500 13.5px var(--ui);color:var(--muted)}
+.tgl i{flex:none;width:44px;height:26px;border-radius:13px;background:var(--line2);position:relative}
+.tgl i::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:var(--fg);transition:transform .2s}
+.tgl.on i{background:var(--zone)}
+.tgl.on i::after{transform:translateX(18px);background:var(--zone-ink)}
+
+/* Lobby */
+.code{display:grid;grid-template-columns:1fr auto auto;gap:9px;align-items:center}
+.code b{font:700 36px/1 var(--display);letter-spacing:.16em;color:var(--zone)}
+.code small{display:block;font:600 11.5px/1 var(--display);letter-spacing:.16em;color:var(--muted);margin-bottom:6px}
+.sq{width:50px;height:50px;border-radius:13px;background:var(--p2);border:1px solid var(--line2);display:grid;place-items:center}
+.sq svg{width:24px;height:24px;stroke:var(--fg);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ready{display:grid;gap:7px}
+.ready .bars{display:flex;gap:3px}
+.ready .bars i{flex:1;height:7px;border-radius:4px;background:var(--line)}
+.ready .bars i.on{background:var(--zone)}
+.ready .bars i.part{background:var(--warn)}
+.pl{display:grid;grid-template-columns:auto 1fr auto auto;gap:9px;align-items:center;padding:8px 10px;border-radius:12px;background:var(--p2);border:1px solid #26352a;min-height:56px}
+.pl .av{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font:700 11.5px var(--display);color:#0b100c}
+.pl .nm{font:600 16.5px/1.1 var(--ui);min-width:0;overflow:hidden}
+.pl .nm small{display:block;font:500 13px var(--ui);color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pl .nm small.w{color:var(--warn)}
+.ics{display:flex;gap:3px}
+.ics i{width:24px;height:24px;border-radius:7px;display:grid;place-items:center;background:#1f3324}
+.ics i svg{width:14px;height:14px;stroke:var(--zone);fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.ics i.no{background:#3a2a10}
+.ics i.no svg{stroke:var(--warn)}
+.rt{font:700 12px/1 var(--display);letter-spacing:.1em;text-transform:uppercase;padding:9px 8px;border-radius:8px;min-width:72px;text-align:center}
+.rt.r{background:var(--runner);color:#03121f}
+.rt.h{color:var(--hunter);border:1.5px solid var(--hunter)}
+.pl.off{opacity:.55}
+.pl .rm{font:600 14px var(--ui);color:var(--badtx);padding:10px 4px}
+.draw{display:grid;grid-template-columns:auto auto auto 1fr;gap:7px;align-items:center}
+.draw .n{min-width:74px;text-align:center;font:700 16px var(--display)}
+.stp{width:44px;height:44px;border-radius:11px;background:var(--p2);border:1px solid var(--line2);font:700 22px/1 var(--display)}
+.stp:disabled{opacity:.35}
+.presets{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.presets button{border-radius:11px;padding:10px 6px;background:var(--p2);border:1px solid var(--line2);display:grid;gap:3px;text-align:center}
+.presets button b{font:700 16px var(--display)}
+.presets button small{font:500 13px var(--ui);color:var(--muted)}
+.presets button.on{border-color:var(--zone);background:#1d2b1c}
+.presets button.on b{color:var(--zone)}
+.rsum{font:500 15.5px/1.4 var(--ui);color:var(--fg);background:#0d130f;border-radius:11px;padding:11px 13px;border:1px dashed var(--line2)}
+.more{font:600 15px var(--ui);color:var(--muted);text-align:left;padding:4px 0}
+.set{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line)}
 .set:last-child{border-bottom:0}
 .step{display:flex;align-items:center;gap:6px}
-.step b{min-width:64px;text-align:center;font:700 16px var(--display);font-variant-numeric:tabular-nums}
-.step button{width:40px;height:40px;border-radius:4px;border:1px solid var(--line);background:var(--panel2);font:700 20px/1 var(--display)}
-.step button:disabled{opacity:.35;cursor:not-allowed}
-.note{font-size:14px;color:var(--muted)}
-.note b{color:var(--fg)}
-.big{font:700 26px/1.1 var(--display);letter-spacing:.04em;text-transform:uppercase}
-.big.hunter{color:var(--hunter)}.big.runner{color:var(--runner)}
-.confirm{display:grid;gap:8px;padding:10px;border:1px solid var(--danger);border-radius:4px;background:#1d0f0e}
+.step b{min-width:70px;text-align:center;font:700 16px var(--display);font-variant-numeric:tabular-nums}
+.yourrole{border-radius:16px;padding:16px;background:var(--role);color:#140504;display:grid;gap:4px}
+.yourrole.runner{color:#03121f}
+.yourrole small{font:700 12px/1 var(--display);letter-spacing:.2em;opacity:.7}
+.yourrole b{font:700 40px/1 var(--display);text-transform:uppercase}
+.yourrole span{font:600 15px var(--ui);opacity:.82}
+.checks{display:grid;gap:7px}
+.ck{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:10px 11px;border-radius:12px;background:var(--p2);border:1px solid #26352a;text-align:left;width:100%}
+.ck .st{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font:700 15px var(--display);background:var(--zone);color:var(--zone-ink)}
+.ck .st.no{background:var(--warn);color:#1a1600}
+.ck b{font:600 16px var(--ui)}
+.ck b small{display:block;font:500 13.5px var(--ui);color:var(--muted)}
+.ck .go{font:700 13px var(--display);letter-spacing:.08em;color:var(--zone);text-transform:uppercase}
+.startbar{position:fixed;left:0;right:0;bottom:0;z-index:26;padding:14px max(14px,var(--sar)) calc(var(--sab) + 16px) max(14px,var(--sal));background:linear-gradient(rgba(17,24,19,0),var(--p1) 32%)}
+.score{width:100%;border-collapse:collapse;font:600 16px var(--ui)}
+.score td{padding:8px 4px;border-bottom:1px solid var(--line)}
+.score td.n{text-align:right;font-family:var(--display);font-variant-numeric:tabular-nums}
+.score td.p{text-align:right;font:600 13px var(--display);color:var(--zone)}
+.score tr.me td{color:var(--zone)}
+
+/* Ende */
+.win{border-radius:16px;padding:16px;background:var(--wc,var(--p3));color:#140504;display:grid;gap:4px}
+.win.runner{color:#03121f}
+.win.abort{color:var(--fg);border:1px solid var(--line2)}
+.win small{font:700 12px/1 var(--display);letter-spacing:.2em;opacity:.7}
+.win b{font:700 34px/1 var(--display);text-transform:uppercase}
+.win span{font:600 15.5px var(--ui);opacity:.88}
+.surv{display:grid;gap:8px}
+.surv div{display:grid;grid-template-columns:minmax(60px,auto) 1fr auto;gap:9px;align-items:center;font:600 15px var(--ui)}
+.surv i{height:12px;border-radius:6px;background:var(--line);position:relative;overflow:hidden}
+.surv i u{position:absolute;inset:0 auto 0 0;background:var(--runner);border-radius:6px}
+.surv em{font-style:normal;font:600 13.5px var(--display);color:var(--muted);text-align:right;white-space:nowrap}
+
+/* Taschenmodus */
+#pocket{position:fixed;inset:0;z-index:30;background:#000;display:flex;flex-direction:column;padding:calc(var(--sat) + 14px) max(18px,var(--sar)) calc(var(--sab) + 18px) max(18px,var(--sal));gap:10px}
+#pocket .top{display:flex;justify-content:space-between;align-items:center}
+#pocket .top span{font:600 16px var(--display);color:#9fb3a5}
+#pocket .top span b{color:#fff}
+#pocket .big{text-align:center;margin-top:6px}
+#pocket .big small{font:700 15px/1 var(--display);letter-spacing:.28em;color:#9fb3a5}
+#pocket .big b{display:block;font:700 min(30vw,120px)/.95 var(--display);font-variant-numeric:tabular-nums;letter-spacing:-.02em;color:#fff}
+#pocket .big.warn b{color:var(--runner);animation:blink 1s steps(2) infinite}
+#pocket .tg2{display:grid;justify-items:center;gap:6px;text-align:center;margin-top:4px}
+#pocket .tg2 svg{width:min(32vw,128px);height:min(32vw,128px);fill:var(--runner);transition:transform .5s}
+#pocket .tg2 b{font:700 32px/1 var(--display);color:#fff}
+#pocket .tg2 span{font:600 19px var(--ui);color:#cfd9d2}
+#pocket .sec2{border-top:1px solid #222;padding-top:12px;display:flex;justify-content:space-between;gap:10px;font:600 18px var(--ui);color:#cfd9d2}
+#pocket .sec2 b{font-family:var(--display);color:#fff}
+#pocket .sec2 .bad{color:var(--badtx)}
+#pocket .zb{text-align:center;display:grid;gap:6px;margin-top:10px}
+#pocket .zb b{font:700 44px/1 var(--display);color:var(--zone)}
+#pocket .zb b.bad{color:var(--bad)}
+#pocket .zb span{font:600 18px var(--ui);color:#cfd9d2}
+#pocket .bot{margin-top:auto;display:grid;grid-template-columns:1fr 1fr;gap:9px}
+#pocket .hint{font:500 13.5px var(--ui);color:#6f8577;text-align:center}
+
+/* Enthüllung, Dialog, QR */
+#reveal{position:fixed;inset:0;z-index:40;display:grid;align-content:center;justify-items:center;gap:14px;text-align:center;padding:30px;background:var(--rv,var(--hunter));color:#140504;animation:rev .5s cubic-bezier(.2,.8,.2,1)}
+#reveal.runner{color:#03121f}
+#reveal.zone{color:var(--zone-ink)}
+@keyframes rev{from{clip-path:circle(0 at 50% 50%)}to{clip-path:circle(150% at 50% 50%)}}
+#reveal small{font:700 15px/1 var(--display);letter-spacing:.3em;text-transform:uppercase;opacity:.75}
+#reveal h2{margin:0;font:700 min(18vw,76px)/.9 var(--display);letter-spacing:.02em;text-transform:uppercase}
+#reveal p{margin:0;font:600 23px/1.2 var(--ui);max-width:300px}
+#reveal .cd{font:700 min(20vw,84px)/1 var(--display);font-variant-numeric:tabular-nums;margin-top:6px}
+#reveal .hint{font:600 15px var(--ui);opacity:.75;position:absolute;bottom:calc(var(--sab) + 30px);left:20px;right:20px}
+#modal{position:fixed;inset:0;z-index:45;background:rgba(5,8,6,.86);display:grid;align-content:end;padding:0 max(12px,var(--sar)) calc(var(--sab) + 16px) max(12px,var(--sal))}
+.mbox{background:var(--p1);border:2px solid var(--hunter);border-radius:20px;padding:20px 16px 16px;display:grid;gap:13px;animation:up .35s ease-out;max-width:520px;width:100%;justify-self:center}
+@keyframes up{from{transform:translateY(30px);opacity:0}}
+.mbox h3{margin:0;font:700 32px/1 var(--display);color:var(--hunter);text-transform:uppercase}
+.mbox p{margin:0;font:500 18px/1.35 var(--ui)}
+.mbox p b{font-weight:700}
+.mbox .fine{font-size:14.5px;color:var(--muted)}
+#qr{position:fixed;inset:0;z-index:46;background:rgba(5,8,6,.95);display:grid;align-content:center;justify-items:center;gap:16px;padding:24px;text-align:center}
+#qr .q{background:#fff;padding:16px;border-radius:18px}
+#qr .q svg{display:block;width:min(64vw,260px);height:min(64vw,260px)}
+#qr b{font:700 36px/1 var(--display);letter-spacing:.2em;color:var(--zone)}
+#qr p{margin:0;font:500 16px var(--ui);color:var(--muted)}
+
+/* Toasts */
+#toasts{position:fixed;left:0;right:0;z-index:28;bottom:calc(var(--sheet-h) + 12px);display:grid;justify-items:start;gap:6px;pointer-events:none;padding:0 74px 0 max(14px,var(--sal));transition:bottom .3s}
+.toast{background:var(--p2);border:1px solid var(--line2);border-left:4px solid var(--zone);padding:10px 12px;border-radius:6px;font:600 15.5px/1.3 var(--ui);max-width:440px;animation:tin .25s ease-out;box-shadow:0 8px 20px rgba(0,0,0,.35)}
+.toast.hunter{border-left-color:var(--hunter)}.toast.runner{border-left-color:var(--runner)}
+@keyframes tin{from{transform:translateY(8px);opacity:0}}
 
 /* Startbildschirm */
-#start{position:fixed;inset:0;z-index:40;background:var(--bg);overflow-y:auto;padding:calc(var(--sat) + 28px) max(20px,var(--sar)) calc(var(--sab) + 28px) max(20px,var(--sal))}
-#start .wrap{max-width:420px;margin:0 auto;display:grid;gap:22px}
-.logo{font:700 52px/0.9 var(--display);letter-spacing:.06em;text-transform:uppercase}
-.logo span{color:var(--accent)}
-.tagline{color:var(--muted);margin-top:8px;font-size:16px}
-.grid-bg{position:fixed;inset:0;z-index:-1;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:44px 44px;opacity:.35;mask-image:radial-gradient(circle at 50% 20%,#000 0,transparent 75%);-webkit-mask-image:radial-gradient(circle at 50% 20%,#000 0,transparent 75%)}
-label.f{display:grid;gap:6px;font:600 11px var(--display);letter-spacing:.16em;color:var(--muted);text-transform:uppercase}
-.inp{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:12px;font:600 18px var(--body);color:var(--fg);min-height:48px}
-.inp.code-in{font:700 22px var(--display);letter-spacing:.3em;text-transform:uppercase}
-.or{display:flex;align-items:center;gap:10px;color:var(--muted);font:600 11px var(--display);letter-spacing:.16em}
+#start{position:fixed;inset:0;z-index:50;background:var(--bg);overflow-y:auto;padding:calc(var(--sat) + 28px) max(20px,var(--sar)) calc(var(--sab) + 28px) max(20px,var(--sal))}
+#start .wrap{max-width:430px;margin:0 auto;display:grid;gap:22px}
+.logo{font:700 54px/.9 var(--display);letter-spacing:.06em;text-transform:uppercase}
+.logo span{color:var(--zone)}
+.tagline{color:var(--muted);margin-top:8px;font-size:17px}
+.grid-bg{position:fixed;inset:0;z-index:-1;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:44px 44px;opacity:.35;-webkit-mask-image:radial-gradient(circle at 50% 20%,#000 0,transparent 75%);mask-image:radial-gradient(circle at 50% 20%,#000 0,transparent 75%)}
+label.f{display:grid;gap:7px;font:600 12px var(--display);letter-spacing:.16em;color:var(--muted);text-transform:uppercase}
+.inp{width:100%;background:var(--p1);border:1px solid var(--line2);border-radius:10px;padding:12px;font:600 19px var(--ui);color:var(--fg);min-height:52px}
+.inp.code-in{font:700 23px var(--display);letter-spacing:.3em;text-transform:uppercase}
+.or{display:flex;align-items:center;gap:10px;color:var(--muted);font:600 12px var(--display);letter-spacing:.16em}
 .or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
-.howto{display:grid;gap:8px;font-size:15px;color:var(--muted);border-top:1px solid var(--line);padding-top:16px}
+.howto{display:grid;gap:9px;font-size:16px;color:var(--muted);border-top:1px solid var(--line);padding-top:16px}
 .howto b{color:var(--fg)}
-.err{color:#ffb4ad;font-weight:600;font-size:14px}
-
-/* Modal + Toast */
-#modal{position:fixed;inset:0;z-index:50;background:rgba(5,8,6,.8);display:grid;place-items:center;padding:20px}
-#modal .box{width:100%;max-width:380px;background:var(--panel);border:1px solid var(--hunter);border-radius:6px;padding:20px;display:grid;gap:14px}
-#toasts{position:fixed;left:0;right:0;z-index:45;bottom:calc(var(--sheet-h,200px) + 12px);display:grid;justify-items:start;gap:6px;pointer-events:none;padding:0 72px 0 max(16px,var(--sal))}
-.toast{background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--accent);padding:9px 12px;border-radius:3px;font-weight:600;max-width:420px;animation:tin .25s ease-out}
-.toast.hunter{border-left-color:var(--hunter)}.toast.runner{border-left-color:var(--runner)}
-@keyframes tin{from{transform:translateY(-8px);opacity:0}}
-@media (prefers-reduced-motion:reduce){.mk-ping::after,.toast{animation:none}.ring .fg{transition:none}}
+.err{color:#ffb4ad;font-weight:600;font-size:15px}
+.jrow{display:flex;gap:8px}
+.jrow .inp{flex:1;min-width:0}
+.jrow .btn{width:auto;padding:10px 20px}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-iteration-count:1!important;transition:none!important}}
 </style>
 </head>
 <body>
 <div id="map"></div>
+<div id="edges"></div>
+<div id="vig" hidden></div>
 
 <div id="hud" hidden>
-  <div class="hud-row">
+  <div class="stripe"></div>
+  <div class="hrow">
     <div id="rolePill" class="pill lobby">Lobby</div>
-    <div class="clock"><b id="clock">--:--</b><small id="clockLbl">Warte auf Start</small></div>
-    <div class="pingbox" id="pingBox" hidden>
-      <div class="lbl">Ping in<b id="pingTxt">--:--</b></div>
-      <svg class="ring" viewBox="0 0 40 40" aria-hidden="true"><circle class="bg" cx="20" cy="20" r="16"/><circle class="fg" id="pingRing" cx="20" cy="20" r="16" stroke-dasharray="100.5" stroke-dashoffset="0"/></svg>
-    </div>
+    <div class="hero" id="hero"><small id="heroLbl">Raum</small><b id="heroVal">-----</b><span class="bar" id="heroBarW"><i id="heroBar"></i></span></div>
+    <div class="side"><small id="sideLbl"></small><b id="sideVal"></b></div>
   </div>
-  <div class="stat">
-    <span><i class="dot" id="dNet"></i><em id="tNet" style="font-style:normal">Server</em></span>
-    <span><i class="dot" id="dGps"></i><em id="tGps" style="font-style:normal">GPS</em></span>
-    <span><i class="dot" id="dWake"></i><em id="tWake" style="font-style:normal">Display</em></span>
-  </div>
-  <div id="alerts"></div>
+  <div id="pips"></div>
+  <div id="alert"></div>
 </div>
+<div id="banner" hidden></div>
 
 <div id="fab" hidden>
-  <button class="fab" id="btnCenter" aria-label="Auf mich zentrieren"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></button>
-  <button class="fab" id="btnSound" aria-label="Ton an oder aus"><svg viewBox="0 0 24 24" id="sndIcon"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9c1.5 1.5 1.5 4.5 0 6M19 6c3 3 3 9 0 12"/></svg></button>
+  <button class="fab on" id="bFollow" aria-label="Karte folgt mir"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.5"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></button>
+  <button class="fab" id="bFit" aria-label="Alle zeigen"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  <button class="fab" id="bPocket" aria-label="Taschenmodus"><svg viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 7h4M9 12h6M10 17h4"/></svg></button>
+  <button class="fab" id="bSound" aria-label="Ton an oder aus"><svg viewBox="0 0 24 24" id="sndIcon"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9c1.5 1.5 1.5 4.5 0 6M19 6c3 3 3 9 0 12"/></svg></button>
 </div>
 
-<div id="sheet" hidden>
-  <button class="grab" id="grab" aria-label="Panel ein- oder ausklappen"><i></i></button>
-  <div id="sheetBody"></div>
+<div id="sheet" class="peek" hidden>
+  <div id="grab" role="button" aria-label="Panel größer oder kleiner"><i></i></div>
+  <div id="sb"></div>
 </div>
+<div class="startbar" id="startbar" hidden></div>
+<div id="toasts"></div>
+<div id="pocket" hidden></div>
+<div id="reveal" hidden></div>
+<div id="modal" hidden><div class="mbox" id="mbox"></div></div>
+<div id="qr" hidden></div>
 
 <div id="start">
   <div class="grid-bg"></div>
@@ -190,39 +392,57 @@ label.f{display:grid;gap:6px;font:600 11px var(--display);letter-spacing:.16em;c
     <label class="f" for="nameIn">Dein Name
       <input class="inp" id="nameIn" maxlength="16" autocomplete="nickname" placeholder="z.B. Oli">
     </label>
-    <button class="btn pri wide" id="btnCreate">Neues Spiel erstellen</button>
+    <button class="btn pri" id="btnCreate">Neues Spiel erstellen</button>
     <div class="or">ODER BEITRETEN</div>
-    <div class="row" style="flex-wrap:nowrap">
-      <input class="inp code-in" id="codeIn" maxlength="5" autocomplete="off" autocapitalize="characters" placeholder="CODE" style="flex:1;min-width:0">
+    <div class="jrow">
+      <input class="inp code-in" id="codeIn" maxlength="5" autocomplete="off" autocapitalize="characters" placeholder="CODE" aria-label="Raum-Code">
       <button class="btn pri" id="btnJoin">Los</button>
     </div>
     <div class="err" id="startErr" hidden></div>
     <div class="howto">
-      <div><b>So geht's:</b> Einer erstellt das Spiel und teilt den Code. Alle anderen treten bei.</div>
-      <div><b>Wichtig fürs iPhone:</b> Seite offen lassen und Bildschirm an. Ist der Bildschirm aus, wird dein Standort nicht gesendet. Am besten Auto-Sperre auf „Nie“ stellen und Helligkeit runter.</div>
-      <div><b>Standort:</b> Beim Beitreten fragt der Browser nach deinem Standort. Bitte erlauben.</div>
+      <div><b>So geht's:</b> Einer erstellt das Spiel und zeigt den QR-Code oder teilt den Link. Alle anderen treten bei.</div>
+      <div><b>Wichtig fürs iPhone:</b> Seite offen lassen und Bildschirm an. Ist der Bildschirm aus, wird dein Standort nicht gesendet. Stummschalter aus, damit du die Pings hörst.</div>
+      <div><b>Standort und Kompass:</b> Beim Beitreten fragt der Browser danach. Bitte erlauben.</div>
     </div>
   </div>
 </div>
 
-<div id="modal" hidden><div class="box" id="modalBox"></div></div>
-<div id="toasts"></div>
-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<script>var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],f={},c=function(t,r){o=function(t){for(var r=new Array(t),e=0;e<t;e+=1){r[e]=new Array(t);for(var n=0;n<t;n+=1)r[e][n]=null}return r}(i=4*e+17),l(0,0),l(i-7,0),l(0,i-7),s(),h(),d(t,r),e>=7&&v(t),null==a&&(a=p(e,n,u)),w(a,r)},l=function(t,r){for(var e=-1;e<=7;e+=1)if(!(t+e<=-1||i<=t+e))for(var n=-1;n<=7;n+=1)r+n<=-1||i<=r+n||(o[t+e][r+n]=0<=e&&e<=6&&(0==n||6==n)||0<=n&&n<=6&&(0==e||6==e)||2<=e&&e<=4&&2<=n&&n<=4)},h=function(){for(var t=8;t<i-8;t+=1)null==o[t][6]&&(o[t][6]=t%2==0);for(var r=8;r<i-8;r+=1)null==o[6][r]&&(o[6][r]=r%2==0)},s=function(){for(var t=B.getPatternPosition(e),r=0;r<t.length;r+=1)for(var n=0;n<t.length;n+=1){var i=t[r],a=t[n];if(null==o[i][a])for(var u=-2;u<=2;u+=1)for(var f=-2;f<=2;f+=1)o[i+u][a+f]=-2==u||2==u||-2==f||2==f||0==u&&0==f}},v=function(t){for(var r=B.getBCHTypeNumber(e),n=0;n<18;n+=1){var a=!t&&1==(r>>n&1);o[Math.floor(n/3)][n%3+i-8-3]=a}for(n=0;n<18;n+=1){a=!t&&1==(r>>n&1);o[n%3+i-8-3][Math.floor(n/3)]=a}},d=function(t,r){for(var e=n<<3|r,a=B.getBCHTypeInfo(e),u=0;u<15;u+=1){var f=!t&&1==(a>>u&1);u<6?o[u][8]=f:u<8?o[u+1][8]=f:o[i-15+u][8]=f}for(u=0;u<15;u+=1){f=!t&&1==(a>>u&1);u<8?o[8][i-u-1]=f:u<9?o[8][15-u-1+1]=f:o[8][15-u-1]=f}o[i-8][8]=!t},w=function(t,r){for(var e=-1,n=i-1,a=7,u=0,f=B.getMaskFunction(r),c=i-1;c>0;c-=2)for(6==c&&(c-=1);;){for(var g=0;g<2;g+=1)if(null==o[n][c-g]){var l=!1;u<t.length&&(l=1==(t[u]>>>a&1)),f(n,c-g)&&(l=!l),o[n][c-g]=l,-1==(a-=1)&&(u+=1,a=7)}if((n+=e)<0||i<=n){n-=e,e=-e;break}}},p=function(t,r,e){for(var n=A.getRSBlocks(t,r),o=b(),i=0;i<e.length;i+=1){var a=e[i];o.put(a.getMode(),4),o.put(a.getLength(),B.getLengthInBits(a.getMode(),t)),a.write(o)}var u=0;for(i=0;i<n.length;i+=1)u+=n[i].dataCount;if(o.getLengthInBits()>8*u)throw"code length overflow. ("+o.getLengthInBits()+">"+8*u+")";for(o.getLengthInBits()+4<=8*u&&o.put(0,4);o.getLengthInBits()%8!=0;)o.putBit(!1);for(;!(o.getLengthInBits()>=8*u||(o.put(236,8),o.getLengthInBits()>=8*u));)o.put(17,8);return function(t,r){for(var e=0,n=0,o=0,i=new Array(r.length),a=new Array(r.length),u=0;u<r.length;u+=1){var f=r[u].dataCount,c=r[u].totalCount-f;n=Math.max(n,f),o=Math.max(o,c),i[u]=new Array(f);for(var g=0;g<i[u].length;g+=1)i[u][g]=255&t.getBuffer()[g+e];e+=f;var l=B.getErrorCorrectPolynomial(c),h=k(i[u],l.getLength()-1).mod(l);for(a[u]=new Array(l.getLength()-1),g=0;g<a[u].length;g+=1){var s=g+h.getLength()-a[u].length;a[u][g]=s>=0?h.getAt(s):0}}var v=0;for(g=0;g<r.length;g+=1)v+=r[g].totalCount;var d=new Array(v),w=0;for(g=0;g<n;g+=1)for(u=0;u<r.length;u+=1)g<i[u].length&&(d[w]=i[u][g],w+=1);for(g=0;g<o;g+=1)for(u=0;u<r.length;u+=1)g<a[u].length&&(d[w]=a[u][g],w+=1);return d}(o,n)};f.addData=function(t,r){var e=null;switch(r=r||"Byte"){case"Numeric":e=M(t);break;case"Alphanumeric":e=x(t);break;case"Byte":e=m(t);break;case"Kanji":e=L(t);break;default:throw"mode:"+r}u.push(e),a=null},f.isDark=function(t,r){if(t<0||i<=t||r<0||i<=r)throw t+","+r;return o[t][r]},f.getModuleCount=function(){return i},f.make=function(){if(e<1){for(var t=1;t<40;t++){for(var r=A.getRSBlocks(t,n),o=b(),i=0;i<u.length;i++){var a=u[i];o.put(a.getMode(),4),o.put(a.getLength(),B.getLengthInBits(a.getMode(),t)),a.write(o)}var g=0;for(i=0;i<r.length;i++)g+=r[i].dataCount;if(o.getLengthInBits()<=8*g)break}e=t}c(!1,function(){for(var t=0,r=0,e=0;e<8;e+=1){c(!0,e);var n=B.getLostPoint(f);(0==e||t>n)&&(t=n,r=e)}return r}())},f.createTableTag=function(t,r){t=t||2;var e="";e+='<table style="',e+=" border-width: 0px; border-style: none;",e+=" border-collapse: collapse;",e+=" padding: 0px; margin: "+(r=void 0===r?4*t:r)+"px;",e+='">',e+="<tbody>";for(var n=0;n<f.getModuleCount();n+=1){e+="<tr>";for(var o=0;o<f.getModuleCount();o+=1)e+='<td style="',e+=" border-width: 0px; border-style: none;",e+=" border-collapse: collapse;",e+=" padding: 0px; margin: 0px;",e+=" width: "+t+"px;",e+=" height: "+t+"px;",e+=" background-color: ",e+=f.isDark(n,o)?"#000000":"#ffffff",e+=";",e+='"/>';e+="</tr>"}return e+="</tbody>",e+="</table>"},f.createSvgTag=function(t,r,e,n){var o={};"object"==typeof arguments[0]&&(t=(o=arguments[0]).cellSize,r=o.margin,e=o.alt,n=o.title),t=t||2,r=void 0===r?4*t:r,(e="string"==typeof e?{text:e}:e||{}).text=e.text||null,e.id=e.text?e.id||"qrcode-description":null,(n="string"==typeof n?{text:n}:n||{}).text=n.text||null,n.id=n.text?n.id||"qrcode-title":null;var i,a,u,c,g=f.getModuleCount()*t+2*r,l="";for(c="l"+t+",0 0,"+t+" -"+t+",0 0,-"+t+"z ",l+='<svg version="1.1" xmlns="http://www.w3.org/2000/svg"',l+=o.scalable?"":' width="'+g+'px" height="'+g+'px"',l+=' viewBox="0 0 '+g+" "+g+'" ',l+=' preserveAspectRatio="xMinYMin meet"',l+=n.text||e.text?' role="img" aria-labelledby="'+y([n.id,e.id].join(" ").trim())+'"':"",l+=">",l+=n.text?'<title id="'+y(n.id)+'">'+y(n.text)+"</title>":"",l+=e.text?'<description id="'+y(e.id)+'">'+y(e.text)+"</description>":"",l+='<rect width="100%" height="100%" fill="white" cx="0" cy="0"/>',l+='<path d="',a=0;a<f.getModuleCount();a+=1)for(u=a*t+r,i=0;i<f.getModuleCount();i+=1)f.isDark(a,i)&&(l+="M"+(i*t+r)+","+u+c);return l+='" stroke="transparent" fill="black"/>',l+="</svg>"},f.createDataURL=function(t,r){t=t||2,r=void 0===r?4*t:r;var e=f.getModuleCount()*t+2*r,n=r,o=e-r;return I(e,e,(function(r,e){if(n<=r&&r<o&&n<=e&&e<o){var i=Math.floor((r-n)/t),a=Math.floor((e-n)/t);return f.isDark(a,i)?0:1}return 1}))},f.createImgTag=function(t,r,e){t=t||2,r=void 0===r?4*t:r;var n=f.getModuleCount()*t+2*r,o="";return o+="<img",o+=' src="',o+=f.createDataURL(t,r),o+='"',o+=' width="',o+=n,o+='"',o+=' height="',o+=n,o+='"',e&&(o+=' alt="',o+=y(e),o+='"'),o+="/>"};var y=function(t){for(var r="",e=0;e<t.length;e+=1){var n=t.charAt(e);switch(n){case"<":r+="&lt;";break;case">":r+="&gt;";break;case"&":r+="&amp;";break;case'"':r+="&quot;";break;default:r+=n}}return r};return f.createASCII=function(t,r){if((t=t||1)<2)return function(t){t=void 0===t?2:t;var r,e,n,o,i,a=1*f.getModuleCount()+2*t,u=t,c=a-t,g={"██":"█","█ ":"▀"," █":"▄","  ":" "},l={"██":"▀","█ ":"▀"," █":" ","  ":" "},h="";for(r=0;r<a;r+=2){for(n=Math.floor((r-u)/1),o=Math.floor((r+1-u)/1),e=0;e<a;e+=1)i="█",u<=e&&e<c&&u<=r&&r<c&&f.isDark(n,Math.floor((e-u)/1))&&(i=" "),u<=e&&e<c&&u<=r+1&&r+1<c&&f.isDark(o,Math.floor((e-u)/1))?i+=" ":i+="█",h+=t<1&&r+1>=c?l[i]:g[i];h+="\n"}return a%2&&t>0?h.substring(0,h.length-a-1)+Array(a+1).join("▀"):h.substring(0,h.length-1)}(r);t-=1,r=void 0===r?2*t:r;var e,n,o,i,a=f.getModuleCount()*t+2*r,u=r,c=a-r,g=Array(t+1).join("██"),l=Array(t+1).join("  "),h="",s="";for(e=0;e<a;e+=1){for(o=Math.floor((e-u)/t),s="",n=0;n<a;n+=1)i=1,u<=n&&n<c&&u<=e&&e<c&&f.isDark(o,Math.floor((n-u)/t))&&(i=0),s+=i?g:l;for(o=0;o<t;o+=1)h+=s+"\n"}return h.substring(0,h.length-1)},f.renderTo2dContext=function(t,r){r=r||2;for(var e=f.getModuleCount(),n=0;n<e;n++)for(var o=0;o<e;o++)t.fillStyle=f.isDark(n,o)?"black":"white",t.fillRect(n*r,o*r,r,r)},f};t.stringToBytes=(t.stringToBytesFuncs={default:function(t){for(var r=[],e=0;e<t.length;e+=1){var n=t.charCodeAt(e);r.push(255&n)}return r}}).default,t.createStringToBytes=function(t,r){var e=function(){for(var e=S(t),n=function(){var t=e.read();if(-1==t)throw"eof";return t},o=0,i={};;){var a=e.read();if(-1==a)break;var u=n(),f=n()<<8|n();i[String.fromCharCode(a<<8|u)]=f,o+=1}if(o!=r)throw o+" != "+r;return i}(),n="?".charCodeAt(0);return function(t){for(var r=[],o=0;o<t.length;o+=1){var i=t.charCodeAt(o);if(i<128)r.push(i);else{var a=e[t.charAt(o)];"number"==typeof a?(255&a)==a?r.push(a):(r.push(a>>>8),r.push(255&a)):r.push(n)}}return r}};var r,e,n,o,i,a=1,u=2,f=4,c=8,g={L:1,M:0,Q:3,H:2},l=0,h=1,s=2,v=3,d=4,w=5,p=6,y=7,B=(r=[[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],[6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70],[6,26,50,74],[6,30,54,78],[6,30,56,82],[6,30,58,86],[6,34,62,90],[6,28,50,72,94],[6,26,50,74,98],[6,30,54,78,102],[6,28,54,80,106],[6,32,58,84,110],[6,30,58,86,114],[6,34,62,90,118],[6,26,50,74,98,122],[6,30,54,78,102,126],[6,26,52,78,104,130],[6,30,56,82,108,134],[6,34,60,86,112,138],[6,30,58,86,114,142],[6,34,62,90,118,146],[6,30,54,78,102,126,150],[6,24,50,76,102,128,154],[6,28,54,80,106,132,158],[6,32,58,84,110,136,162],[6,26,54,82,110,138,166],[6,30,58,86,114,142,170]],e=1335,n=7973,i=function(t){for(var r=0;0!=t;)r+=1,t>>>=1;return r},(o={}).getBCHTypeInfo=function(t){for(var r=t<<10;i(r)-i(e)>=0;)r^=e<<i(r)-i(e);return 21522^(t<<10|r)},o.getBCHTypeNumber=function(t){for(var r=t<<12;i(r)-i(n)>=0;)r^=n<<i(r)-i(n);return t<<12|r},o.getPatternPosition=function(t){return r[t-1]},o.getMaskFunction=function(t){switch(t){case l:return function(t,r){return(t+r)%2==0};case h:return function(t,r){return t%2==0};case s:return function(t,r){return r%3==0};case v:return function(t,r){return(t+r)%3==0};case d:return function(t,r){return(Math.floor(t/2)+Math.floor(r/3))%2==0};case w:return function(t,r){return t*r%2+t*r%3==0};case p:return function(t,r){return(t*r%2+t*r%3)%2==0};case y:return function(t,r){return(t*r%3+(t+r)%2)%2==0};default:throw"bad maskPattern:"+t}},o.getErrorCorrectPolynomial=function(t){for(var r=k([1],0),e=0;e<t;e+=1)r=r.multiply(k([1,C.gexp(e)],0));return r},o.getLengthInBits=function(t,r){if(1<=r&&r<10)switch(t){case a:return 10;case u:return 9;case f:case c:return 8;default:throw"mode:"+t}else if(r<27)switch(t){case a:return 12;case u:return 11;case f:return 16;case c:return 10;default:throw"mode:"+t}else{if(!(r<41))throw"type:"+r;switch(t){case a:return 14;case u:return 13;case f:return 16;case c:return 12;default:throw"mode:"+t}}},o.getLostPoint=function(t){for(var r=t.getModuleCount(),e=0,n=0;n<r;n+=1)for(var o=0;o<r;o+=1){for(var i=0,a=t.isDark(n,o),u=-1;u<=1;u+=1)if(!(n+u<0||r<=n+u))for(var f=-1;f<=1;f+=1)o+f<0||r<=o+f||0==u&&0==f||a==t.isDark(n+u,o+f)&&(i+=1);i>5&&(e+=3+i-5)}for(n=0;n<r-1;n+=1)for(o=0;o<r-1;o+=1){var c=0;t.isDark(n,o)&&(c+=1),t.isDark(n+1,o)&&(c+=1),t.isDark(n,o+1)&&(c+=1),t.isDark(n+1,o+1)&&(c+=1),0!=c&&4!=c||(e+=3)}for(n=0;n<r;n+=1)for(o=0;o<r-6;o+=1)t.isDark(n,o)&&!t.isDark(n,o+1)&&t.isDark(n,o+2)&&t.isDark(n,o+3)&&t.isDark(n,o+4)&&!t.isDark(n,o+5)&&t.isDark(n,o+6)&&(e+=40);for(o=0;o<r;o+=1)for(n=0;n<r-6;n+=1)t.isDark(n,o)&&!t.isDark(n+1,o)&&t.isDark(n+2,o)&&t.isDark(n+3,o)&&t.isDark(n+4,o)&&!t.isDark(n+5,o)&&t.isDark(n+6,o)&&(e+=40);var g=0;for(o=0;o<r;o+=1)for(n=0;n<r;n+=1)t.isDark(n,o)&&(g+=1);return e+=Math.abs(100*g/r/r-50)/5*10},o),C=function(){for(var t=new Array(256),r=new Array(256),e=0;e<8;e+=1)t[e]=1<<e;for(e=8;e<256;e+=1)t[e]=t[e-4]^t[e-5]^t[e-6]^t[e-8];for(e=0;e<255;e+=1)r[t[e]]=e;var n={glog:function(t){if(t<1)throw"glog("+t+")";return r[t]},gexp:function(r){for(;r<0;)r+=255;for(;r>=256;)r-=255;return t[r]}};return n}();function k(t,r){if(void 0===t.length)throw t.length+"/"+r;var e=function(){for(var e=0;e<t.length&&0==t[e];)e+=1;for(var n=new Array(t.length-e+r),o=0;o<t.length-e;o+=1)n[o]=t[o+e];return n}(),n={getAt:function(t){return e[t]},getLength:function(){return e.length},multiply:function(t){for(var r=new Array(n.getLength()+t.getLength()-1),e=0;e<n.getLength();e+=1)for(var o=0;o<t.getLength();o+=1)r[e+o]^=C.gexp(C.glog(n.getAt(e))+C.glog(t.getAt(o)));return k(r,0)},mod:function(t){if(n.getLength()-t.getLength()<0)return n;for(var r=C.glog(n.getAt(0))-C.glog(t.getAt(0)),e=new Array(n.getLength()),o=0;o<n.getLength();o+=1)e[o]=n.getAt(o);for(o=0;o<t.getLength();o+=1)e[o]^=C.gexp(C.glog(t.getAt(o))+r);return k(e,0).mod(t)}};return n}var A=function(){var t=[[1,26,19],[1,26,16],[1,26,13],[1,26,9],[1,44,34],[1,44,28],[1,44,22],[1,44,16],[1,70,55],[1,70,44],[2,35,17],[2,35,13],[1,100,80],[2,50,32],[2,50,24],[4,25,9],[1,134,108],[2,67,43],[2,33,15,2,34,16],[2,33,11,2,34,12],[2,86,68],[4,43,27],[4,43,19],[4,43,15],[2,98,78],[4,49,31],[2,32,14,4,33,15],[4,39,13,1,40,14],[2,121,97],[2,60,38,2,61,39],[4,40,18,2,41,19],[4,40,14,2,41,15],[2,146,116],[3,58,36,2,59,37],[4,36,16,4,37,17],[4,36,12,4,37,13],[2,86,68,2,87,69],[4,69,43,1,70,44],[6,43,19,2,44,20],[6,43,15,2,44,16],[4,101,81],[1,80,50,4,81,51],[4,50,22,4,51,23],[3,36,12,8,37,13],[2,116,92,2,117,93],[6,58,36,2,59,37],[4,46,20,6,47,21],[7,42,14,4,43,15],[4,133,107],[8,59,37,1,60,38],[8,44,20,4,45,21],[12,33,11,4,34,12],[3,145,115,1,146,116],[4,64,40,5,65,41],[11,36,16,5,37,17],[11,36,12,5,37,13],[5,109,87,1,110,88],[5,65,41,5,66,42],[5,54,24,7,55,25],[11,36,12,7,37,13],[5,122,98,1,123,99],[7,73,45,3,74,46],[15,43,19,2,44,20],[3,45,15,13,46,16],[1,135,107,5,136,108],[10,74,46,1,75,47],[1,50,22,15,51,23],[2,42,14,17,43,15],[5,150,120,1,151,121],[9,69,43,4,70,44],[17,50,22,1,51,23],[2,42,14,19,43,15],[3,141,113,4,142,114],[3,70,44,11,71,45],[17,47,21,4,48,22],[9,39,13,16,40,14],[3,135,107,5,136,108],[3,67,41,13,68,42],[15,54,24,5,55,25],[15,43,15,10,44,16],[4,144,116,4,145,117],[17,68,42],[17,50,22,6,51,23],[19,46,16,6,47,17],[2,139,111,7,140,112],[17,74,46],[7,54,24,16,55,25],[34,37,13],[4,151,121,5,152,122],[4,75,47,14,76,48],[11,54,24,14,55,25],[16,45,15,14,46,16],[6,147,117,4,148,118],[6,73,45,14,74,46],[11,54,24,16,55,25],[30,46,16,2,47,17],[8,132,106,4,133,107],[8,75,47,13,76,48],[7,54,24,22,55,25],[22,45,15,13,46,16],[10,142,114,2,143,115],[19,74,46,4,75,47],[28,50,22,6,51,23],[33,46,16,4,47,17],[8,152,122,4,153,123],[22,73,45,3,74,46],[8,53,23,26,54,24],[12,45,15,28,46,16],[3,147,117,10,148,118],[3,73,45,23,74,46],[4,54,24,31,55,25],[11,45,15,31,46,16],[7,146,116,7,147,117],[21,73,45,7,74,46],[1,53,23,37,54,24],[19,45,15,26,46,16],[5,145,115,10,146,116],[19,75,47,10,76,48],[15,54,24,25,55,25],[23,45,15,25,46,16],[13,145,115,3,146,116],[2,74,46,29,75,47],[42,54,24,1,55,25],[23,45,15,28,46,16],[17,145,115],[10,74,46,23,75,47],[10,54,24,35,55,25],[19,45,15,35,46,16],[17,145,115,1,146,116],[14,74,46,21,75,47],[29,54,24,19,55,25],[11,45,15,46,46,16],[13,145,115,6,146,116],[14,74,46,23,75,47],[44,54,24,7,55,25],[59,46,16,1,47,17],[12,151,121,7,152,122],[12,75,47,26,76,48],[39,54,24,14,55,25],[22,45,15,41,46,16],[6,151,121,14,152,122],[6,75,47,34,76,48],[46,54,24,10,55,25],[2,45,15,64,46,16],[17,152,122,4,153,123],[29,74,46,14,75,47],[49,54,24,10,55,25],[24,45,15,46,46,16],[4,152,122,18,153,123],[13,74,46,32,75,47],[48,54,24,14,55,25],[42,45,15,32,46,16],[20,147,117,4,148,118],[40,75,47,7,76,48],[43,54,24,22,55,25],[10,45,15,67,46,16],[19,148,118,6,149,119],[18,75,47,31,76,48],[34,54,24,34,55,25],[20,45,15,61,46,16]],r=function(t,r){var e={};return e.totalCount=t,e.dataCount=r,e},e={};return e.getRSBlocks=function(e,n){var o=function(r,e){switch(e){case g.L:return t[4*(r-1)+0];case g.M:return t[4*(r-1)+1];case g.Q:return t[4*(r-1)+2];case g.H:return t[4*(r-1)+3];default:return}}(e,n);if(void 0===o)throw"bad rs block @ typeNumber:"+e+"/errorCorrectionLevel:"+n;for(var i=o.length/3,a=[],u=0;u<i;u+=1)for(var f=o[3*u+0],c=o[3*u+1],l=o[3*u+2],h=0;h<f;h+=1)a.push(r(c,l));return a},e}(),b=function(){var t=[],r=0,e={getBuffer:function(){return t},getAt:function(r){var e=Math.floor(r/8);return 1==(t[e]>>>7-r%8&1)},put:function(t,r){for(var n=0;n<r;n+=1)e.putBit(1==(t>>>r-n-1&1))},getLengthInBits:function(){return r},putBit:function(e){var n=Math.floor(r/8);t.length<=n&&t.push(0),e&&(t[n]|=128>>>r%8),r+=1}};return e},M=function(t){var r=a,e=t,n={getMode:function(){return r},getLength:function(t){return e.length},write:function(t){for(var r=e,n=0;n+2<r.length;)t.put(o(r.substring(n,n+3)),10),n+=3;n<r.length&&(r.length-n==1?t.put(o(r.substring(n,n+1)),4):r.length-n==2&&t.put(o(r.substring(n,n+2)),7))}},o=function(t){for(var r=0,e=0;e<t.length;e+=1)r=10*r+i(t.charAt(e));return r},i=function(t){if("0"<=t&&t<="9")return t.charCodeAt(0)-"0".charCodeAt(0);throw"illegal char :"+t};return n},x=function(t){var r=u,e=t,n={getMode:function(){return r},getLength:function(t){return e.length},write:function(t){for(var r=e,n=0;n+1<r.length;)t.put(45*o(r.charAt(n))+o(r.charAt(n+1)),11),n+=2;n<r.length&&t.put(o(r.charAt(n)),6)}},o=function(t){if("0"<=t&&t<="9")return t.charCodeAt(0)-"0".charCodeAt(0);if("A"<=t&&t<="Z")return t.charCodeAt(0)-"A".charCodeAt(0)+10;switch(t){case" ":return 36;case"$":return 37;case"%":return 38;case"*":return 39;case"+":return 40;case"-":return 41;case".":return 42;case"/":return 43;case":":return 44;default:throw"illegal char :"+t}};return n},m=function(r){var e=f,n=t.stringToBytes(r),o={getMode:function(){return e},getLength:function(t){return n.length},write:function(t){for(var r=0;r<n.length;r+=1)t.put(n[r],8)}};return o},L=function(r){var e=c,n=t.stringToBytesFuncs.SJIS;if(!n)throw"sjis not supported.";!function(){var t=n("友");if(2!=t.length||38726!=(t[0]<<8|t[1]))throw"sjis not supported."}();var o=n(r),i={getMode:function(){return e},getLength:function(t){return~~(o.length/2)},write:function(t){for(var r=o,e=0;e+1<r.length;){var n=(255&r[e])<<8|255&r[e+1];if(33088<=n&&n<=40956)n-=33088;else{if(!(57408<=n&&n<=60351))throw"illegal char at "+(e+1)+"/"+n;n-=49472}n=192*(n>>>8&255)+(255&n),t.put(n,13),e+=2}if(e<r.length)throw"illegal char at "+(e+1)}};return i},D=function(){var t=[],r={writeByte:function(r){t.push(255&r)},writeShort:function(t){r.writeByte(t),r.writeByte(t>>>8)},writeBytes:function(t,e,n){e=e||0,n=n||t.length;for(var o=0;o<n;o+=1)r.writeByte(t[o+e])},writeString:function(t){for(var e=0;e<t.length;e+=1)r.writeByte(t.charCodeAt(e))},toByteArray:function(){return t},toString:function(){var r="";r+="[";for(var e=0;e<t.length;e+=1)e>0&&(r+=","),r+=t[e];return r+="]"}};return r},S=function(t){var r=t,e=0,n=0,o=0,i={read:function(){for(;o<8;){if(e>=r.length){if(0==o)return-1;throw"unexpected end of file./"+o}var t=r.charAt(e);if(e+=1,"="==t)return o=0,-1;t.match(/^\s$/)||(n=n<<6|a(t.charCodeAt(0)),o+=6)}var i=n>>>o-8&255;return o-=8,i}},a=function(t){if(65<=t&&t<=90)return t-65;if(97<=t&&t<=122)return t-97+26;if(48<=t&&t<=57)return t-48+52;if(43==t)return 62;if(47==t)return 63;throw"c:"+t};return i},I=function(t,r,e){for(var n=function(t,r){var e=t,n=r,o=new Array(t*r),i={setPixel:function(t,r,n){o[r*e+t]=n},write:function(t){t.writeString("GIF87a"),t.writeShort(e),t.writeShort(n),t.writeByte(128),t.writeByte(0),t.writeByte(0),t.writeByte(0),t.writeByte(0),t.writeByte(0),t.writeByte(255),t.writeByte(255),t.writeByte(255),t.writeString(","),t.writeShort(0),t.writeShort(0),t.writeShort(e),t.writeShort(n),t.writeByte(0);var r=a(2);t.writeByte(2);for(var o=0;r.length-o>255;)t.writeByte(255),t.writeBytes(r,o,255),o+=255;t.writeByte(r.length-o),t.writeBytes(r,o,r.length-o),t.writeByte(0),t.writeString(";")}},a=function(t){for(var r=1<<t,e=1+(1<<t),n=t+1,i=u(),a=0;a<r;a+=1)i.add(String.fromCharCode(a));i.add(String.fromCharCode(r)),i.add(String.fromCharCode(e));var f,c,g,l=D(),h=(f=l,c=0,g=0,{write:function(t,r){if(t>>>r!=0)throw"length over";for(;c+r>=8;)f.writeByte(255&(t<<c|g)),r-=8-c,t>>>=8-c,g=0,c=0;g|=t<<c,c+=r},flush:function(){c>0&&f.writeByte(g)}});h.write(r,n);var s=0,v=String.fromCharCode(o[s]);for(s+=1;s<o.length;){var d=String.fromCharCode(o[s]);s+=1,i.contains(v+d)?v+=d:(h.write(i.indexOf(v),n),i.size()<4095&&(i.size()==1<<n&&(n+=1),i.add(v+d)),v=d)}return h.write(i.indexOf(v),n),h.write(e,n),h.flush(),l.toByteArray()},u=function(){var t={},r=0,e={add:function(n){if(e.contains(n))throw"dup key:"+n;t[n]=r,r+=1},size:function(){return r},indexOf:function(r){return t[r]},contains:function(r){return void 0!==t[r]}};return e};return i}(t,r),o=0;o<r;o+=1)for(var i=0;i<t;i+=1)n.setPixel(i,o,e(i,o));var a=D();n.write(a);for(var u=function(){var t=0,r=0,e=0,n="",o={},i=function(t){n+=String.fromCharCode(a(63&t))},a=function(t){if(t<0);else{if(t<26)return 65+t;if(t<52)return t-26+97;if(t<62)return t-52+48;if(62==t)return 43;if(63==t)return 47}throw"n:"+t};return o.writeByte=function(n){for(t=t<<8|255&n,r+=8,e+=1;r>=6;)i(t>>>r-6),r-=6},o.flush=function(){if(r>0&&(i(t<<6-r),t=0,r=0),e%3!=0)for(var o=3-e%3,a=0;a<o;a+=1)n+="="},o.toString=function(){return n},o}(),f=a.toByteArray(),c=0;c<f.length;c+=1)u.writeByte(f[c]);return u.flush(),"data:image/gif;base64,"+u};return t}();qrcode.stringToBytesFuncs["UTF-8"]=function(t){return function(t){for(var r=[],e=0;e<t.length;e++){var n=t.charCodeAt(e);n<128?r.push(n):n<2048?r.push(192|n>>6,128|63&n):n<55296||n>=57344?r.push(224|n>>12,128|n>>6&63,128|63&n):(e++,n=65536+((1023&n)<<10|1023&t.charCodeAt(e)),r.push(240|n>>18,128|n>>12&63,128|n>>6&63,128|63&n))}return r}(t)},function(t){"function"==typeof define&&define.amd?define([],t):"object"==typeof exports&&(module.exports=t())}((function(){return qrcode}));</script>
 <script>
 (() => {
 'use strict';
 
-// ---------- Konstanten ----------
+// ================= Konstanten =================
 const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt'];
+const PFX = 'mhunt2/';
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const DEF_SETTINGS = { ping: 4, head: 3, dur: 60, area: [], zone: true, zr0: 600, zr1: 75, zshrink: 45, zgrace: 60 };
+const PRESETS = {
+  kurz: { n: 'Kurz', dur: 20, ping: 2, head: 2, r0: 400, r1: 50, grace: 30 },
+  normal: { n: 'Normal', dur: 45, ping: 4, head: 3, r0: 600, r1: 75, grace: 60 },
+  lang: { n: 'Lang', dur: 90, ping: 5, head: 5, r0: 900, r1: 100, grace: 60 }
+};
+const DEF = { preset: 'normal', dur: 45, ping: 4, head: 3, r0: 600, r1: 75, grace: 60, shrink: 80, zone: true, area: [] };
 const PING_OPTS = [1, 2, 3, 4, 5, 6, 8, 10, 15];
-const STALE_MS = 45000;
-const COL = { hunter: '#ff5b4f', runner: '#ffb23f', accent: '#9ad15b' };
+const STALE = 45000, ONLINE = 60000, HOST_TIMEOUT = 120000, NEAR_M = 100, NEW_MS = 20000;
+const COL = { hunter: '#ff5b4f', runner: '#4db5ff', zone: '#a6d864' };
+const PCOLS = ['#86d46f', '#ff9e80', '#d7a6e6', '#5fd3e6', '#f2e46d', '#ffb3c7', '#9fb8ff', '#e0b07a', '#7fe0c0', '#c9c9c9'];
+const ARW = 'M12 1.5l7.5 19.5L12 16.6 4.5 21z';
+const arw = key => `<svg viewBox="0 0 24 24"${key ? ` data-r="${key}"` : ''}><path d="${ARW}"/></svg>`;
+const IC = {
+  qr: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM18 18h3v3h-3zM14 20h2M20 14v2"/></svg>',
+  share: '<svg viewBox="0 0 24 24"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v7h14v-7"/></svg>',
+  pin: '<svg viewBox="0 0 24 24"><path d="M12 21s7-6.2 7-12a7 7 0 10-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>',
+  snd: '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9c1.5 1.5 1.5 4.5 0 6"/></svg>',
+  scr: '<svg viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M12 6v4"/></svg>',
+  warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/></svg>',
+  heart: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-8-5.3-8-11a4.5 4.5 0 018-2.8A4.5 4.5 0 0120 10c0 5.7-8 11-8 11z"/></svg>',
+  sndOn: '<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9c1.5 1.5 1.5 4.5 0 6M19 6c3 3 3 9 0 12"/>',
+  sndOff: '<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l5 6M22 9l-5 6"/>'
+};
 
-// ---------- Helfer ----------
+// ================= Helfer =================
 const $ = s => document.querySelector(s);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
@@ -232,15 +452,27 @@ const LS = {
 const rid = n => { const a = crypto.getRandomValues(new Uint8Array(n)); return Array.from(a, b => CODE_CHARS[b % 32]).join(''); };
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const now = () => Date.now();
-const mmss = ms => { ms = Math.max(0, ms); const s = Math.ceil(ms / 1000); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : String(m).padStart(2, '0')) + ':' + String(r).padStart(2, '0'); };
-const ago = ts => { const s = Math.max(0, Math.round((now() - ts) / 1000)); if (s < 60) return 'vor ' + s + ' s'; const m = Math.floor(s / 60); return 'vor ' + m + ' min'; };
-const fmtDist = m => m == null ? '' : m < 1000 ? (Math.round(m / 5) * 5) + ' m' : (m / 1000).toFixed(m < 10000 ? 2 : 1).replace('.', ',') + ' km';
-function haversine(a, b) {
-  const R = 6371000, toR = x => x * Math.PI / 180;
+const mmss = ms => { ms = Math.max(0, ms); const s = Math.ceil(ms / 1000); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(r).padStart(2, '0'); };
+const age = ms => { const s = Math.max(0, Math.floor(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+const fmtD = m => m == null || !isFinite(m) ? '–' : m < 1000 ? (Math.round(m / 5) * 5) + ' m' : (m / 1000).toFixed(m < 10000 ? 2 : 1).replace('.', ',') + ' km';
+const r10 = m => Math.round(m / 10) * 10;
+const hhmm = t => { const d = new Date(t); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+const toR = x => x * Math.PI / 180;
+function hav(a, b) {
   const dLat = toR(b.lat - a.lat), dLng = toR(b.lng - a.lng);
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(toR(a.lat)) * Math.cos(toR(b.lat)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(h));
+  return 2 * 6371000 * Math.asin(Math.sqrt(h));
 }
+function brg(a, b) {
+  const y = Math.sin(toR(b.lng - a.lng)) * Math.cos(toR(b.lat));
+  const x = Math.cos(toR(a.lat)) * Math.sin(toR(b.lat)) - Math.sin(toR(a.lat)) * Math.cos(toR(b.lat)) * Math.cos(toR(b.lng - a.lng));
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+const DN = ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'];
+const DL = ['Norden', 'Nordost', 'Osten', 'Südost', 'Süden', 'Südwest', 'Westen', 'Nordwest'];
+const dn = b => DN[Math.round(b / 45) % 8];
+const dl = b => DL[Math.round(b / 45) % 8];
+const offLL = (lat, lng, n, e) => [lat + n / 111320, lng + e / (111320 * Math.cos(toR(lat)))];
 function inPoly(pt, poly) {
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -249,31 +481,46 @@ function inPoly(pt, poly) {
   }
   return inside;
 }
+const hashCol = id => { let h = 7; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return PCOLS[h % PCOLS.length]; };
+const ini = n => (n || '?').trim().slice(0, 2).toUpperCase();
 const b64 = u8 => { let s = ''; for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]); return btoa(s); };
 const unb64 = s => { const b = atob(s); const u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; };
 const hex = buf => Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('');
+// Struktur nur neu bauen, wenn sie sich ändert; Werte gezielt füllen
+function patch(el, h) { if (el._h !== h) { el.innerHTML = h; el._h = h; return true; } return false; }
+function fill(root, v) {
+  root.querySelectorAll('[data-b]').forEach(e => { const x = v[e.dataset.b]; if (x != null && e.textContent !== String(x)) e.textContent = x; });
+  root.querySelectorAll('[data-r]').forEach(e => { const x = v[e.dataset.r]; if (x != null) { const t = `rotate(${Math.round(x)}deg)`; if (e.style.transform !== t) e.style.transform = t; } });
+  root.querySelectorAll('[data-w]').forEach(e => { const x = v[e.dataset.w]; if (x != null && e.style.width !== x) e.style.width = x; });
+  root.querySelectorAll('[data-o]').forEach(e => { const x = v[e.dataset.o]; if (x != null) e.setAttribute('stroke-dashoffset', x); });
+}
+const setT = (el, t) => { if (el.textContent !== t) el.textContent = t; };
 
-// ---------- Zustand ----------
+// ================= Zustand =================
 const me = { id: LS.get('mh_id') || rid(12), name: LS.get('mh_name') || '' };
 LS.set('mh_id', me.id);
-
+let answered = [];
+try { answered = JSON.parse(LS.get('mh_ans') || '[]'); } catch (e) {}
 const S = {
-  code: null, T: null, key: null, clients: [],
-  cfg: null, players: {}, seenEv: new Set(),
-  pos: null, geoErr: null, geoWatch: null, centered: false,
+  code: null, T: null, key: null, clients: [], cfg: null, players: {}, creq: {}, joinedAt: 0,
+  pos: null, geoErr: null, geoWatch: null, heading: null, headingAt: 0, centered: false,
   lastPub: 0, caughtAt: null, caughtBy: null, ping: null, restored: false,
-  snaps: {}, lastIdx: null, toasted: new Set(),
-  drawing: false, draft: [], confirm: null, sheetMin: false,
-  sound: LS.get('mh_sound') !== '0', endedFor: null, lastSheet: ''
+  snaps: {}, trail: {}, lastIdx: null, lastPhase: null, order: [], newUntil: 0,
+  follow: true, fitUntil: 0, sheet: 'peek', lobbyMin: false, target: null, pocket: false, confirm: null,
+  pending: {}, answered: new Set(answered),
+  sound: LS.get('mh_sound') !== '0', voice: LS.get('mh_voice') === '1', nearSound: LS.get('mh_nears') === '1',
+  tonOk: LS.get('mh_ton') === '1', tonAsk: false,
+  log: [], seenCatch: new Set(), lost: new Set(), near: false, nearBuzz: 0, outSince: null, lastOob: 0, lastZoneSay: 0,
+  drawing: false, draft: [], more: false, randN: null, lastSec: -1, revealUntil: 0, bannerT: null, modalRid: null, rq: false, endFitted: null
 };
 
-// ---------- Krypto (Raum-Code = Schlüssel) ----------
+// ================= Verschlüsselung (Raum-Code = Schlüssel) =================
 async function deriveKeys(code) {
   const enc = new TextEncoder();
-  const k = await crypto.subtle.digest('SHA-256', enc.encode('manhunt1|key|' + code));
+  const k = await crypto.subtle.digest('SHA-256', enc.encode('manhunt2|key|' + code));
   S.key = await crypto.subtle.importKey('raw', k, 'AES-GCM', false, ['encrypt', 'decrypt']);
-  const t = await crypto.subtle.digest('SHA-256', enc.encode('manhunt1|topic|' + code));
-  S.T = 'mhunt1/' + hex(t).slice(0, 24);
+  const t = await crypto.subtle.digest('SHA-256', enc.encode('manhunt2|topic|' + code));
+  S.T = PFX + hex(t).slice(0, 24);
 }
 async function seal(obj) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -289,18 +536,18 @@ async function unseal(str) {
   } catch (e) { return null; }
 }
 
-// ---------- Netzwerk ----------
+// ================= Netzwerk =================
 function connect() {
   disconnect();
-  if (!window.mqtt) { toast('Verbindungsbibliothek nicht geladen. Seite neu laden.', 'hunter'); return; }
+  if (!window.mqtt) { toast('Verbindung konnte nicht geladen werden. Seite neu laden.', 'hunter'); return; }
   S.clients = BROKERS.map(url => {
     const c = mqtt.connect(url, { clientId: 'mh_' + rid(10), clean: true, keepalive: 30, reconnectPeriod: 3000, connectTimeout: 10000, protocolVersion: 4 });
     c.on('connect', () => {
       c.subscribe(S.T + '/#', { qos: 1 });
-      renderHud();
       setTimeout(() => { pubMe(true); if (isHost() && S.cfg) pub('/cfg', S.cfg, true); }, 400);
+      schedule();
     });
-    ['close', 'offline', 'reconnect'].forEach(ev => c.on(ev, renderHud));
+    ['close', 'offline', 'reconnect'].forEach(ev => c.on(ev, schedule));
     c.on('error', () => {});
     c.on('message', (topic, payload) => onMsg(topic, payload.toString()));
     return c;
@@ -308,51 +555,53 @@ function connect() {
 }
 function disconnect() { S.clients.forEach(c => { try { c.end(true); } catch (e) {} }); S.clients = []; }
 const netOk = () => S.clients.some(c => c.connected);
-
 async function pub(sub, obj, retain) {
   if (!S.T) return;
   const payload = obj == null ? '' : await seal(obj);
   S.clients.forEach(c => { if (c.connected) c.publish(S.T + sub, payload, { qos: 1, retain: !!retain }); });
 }
-
 async function onMsg(topic, str) {
   if (!S.T || !topic.startsWith(S.T)) return;
   const sub = topic.slice(S.T.length);
   if (sub.startsWith('/p/')) {
     const id = sub.slice(3);
-    if (!str) { if (id !== me.id) { delete S.players[id]; render(); } return; }
+    if (!str) { if (id !== me.id) { delete S.players[id]; schedule(); } return; }
     const o = await unseal(str); if (!o || o.id !== id) return;
     const cur = S.players[id];
     if (cur && cur.u >= o.u) return;
     S.players[id] = o;
+    if (id !== me.id && o.ping && S.cfg && o.ping.s === S.cfg.startAt) addTrail(id, o.ping);
     if (id === me.id && !S.restored) {
       S.restored = true;
       if (S.caughtAt == null && o.caughtAt) { S.caughtAt = o.caughtAt; S.caughtBy = o.caughtBy || null; }
       if (!S.ping && o.ping) S.ping = o.ping;
     }
-    if (id !== me.id) noteCatch(o);
-    render();
+    schedule();
   } else if (sub === '/cfg') {
     if (!str) return;
     const o = await unseal(str); if (!o) return;
     if (S.cfg && S.cfg.rev >= o.rev) return;
-    const prev = S.cfg; S.cfg = o; onCfg(prev); render();
-  } else if (sub === '/ev') {
-    const o = await unseal(str); if (!o || S.seenEv.has(o.id)) return;
-    S.seenEv.add(o.id);
-    if (now() - o.t > 120000) return;
-    const ph = phase();
-    if (o.type === 'catchreq' && o.to === me.id && role(me.id) === 'runner' && (ph === 'hunt' || ph === 'head')) showCatchReq(o);
+    const prev = S.cfg; S.cfg = o; onCfg(prev); schedule();
+  } else if (sub.startsWith('/c/')) {
+    const id = sub.slice(3);
+    if (!str) { delete S.creq[id]; return; }
+    const o = await unseal(str); if (!o || o.to !== id) return;
+    onCatchMsg(id, o); schedule();
   }
 }
-
+function readiness() {
+  const g = !!(S.pos && S.pos.acc <= 50);
+  return { g: g ? 1 : 0, s: S.tonOk ? 1 : 0, w: WL ? 1 : 0 };
+}
 function myRecord() {
   const p = S.pos || {};
-  return { id: me.id, name: me.name, lat: p.lat ?? null, lng: p.lng ?? null, acc: p.acc ?? null, t: p.t ?? null, caughtAt: S.caughtAt, caughtBy: S.caughtBy, ping: S.ping, u: now() };
+  return { id: me.id, name: me.name, lat: p.lat ?? null, lng: p.lng ?? null, acc: p.acc ?? null, t: p.t ?? null, caughtAt: S.caughtAt, caughtBy: S.caughtBy, ping: S.ping, rd: readiness(), u: now() };
 }
 function pubMe(force) {
   if (!S.T) return;
-  if (!force && now() - S.lastPub < 4000) return;
+  const wait = 4000 - (now() - S.lastPub);
+  if (!force && wait > 0) { if (!S.pubT) S.pubT = setTimeout(() => { S.pubT = null; pubMe(true); }, wait); return; }
+  clearTimeout(S.pubT); S.pubT = null;
   S.lastPub = now();
   pub('/p/' + me.id, myRecord(), true);
 }
@@ -360,52 +609,57 @@ function pubCfg(next) {
   next.rev = Math.max(now(), (S.cfg?.rev || 0) + 1);
   const prev = S.cfg; S.cfg = next; onCfg(prev);
   pub('/cfg', next, true);
-  render();
+  schedule();
 }
 
-// ---------- Spiel-Logik ----------
+// ================= Spiellogik =================
 const isHost = () => !!S.cfg && S.cfg.host === me.id;
-function allPlayers() {
-  const out = { ...S.players };
-  if (S.T) out[me.id] = { ...myRecord(), u: now() };
-  return out;
+const rec = id => id === me.id ? myRecord() : S.players[id];
+const nameOf = id => id === me.id ? me.name : (S.players[id]?.name || S.cfg?.names?.[id] || '?');
+const fresh = id => id === me.id || (!!S.players[id] && now() - S.players[id].u < STALE);
+const st = () => ({ ...DEF, ...(S.cfg?.settings || {}) });
+function lobbyList() {
+  const on = [], off = [];
+  const all = { ...S.players }; if (S.T) all[me.id] = myRecord();
+  for (const p of Object.values(all)) {
+    const d = now() - p.u;
+    if (p.id === me.id || d < ONLINE) on.push(p); else if (d < 30 * 60000) off.push(p);
+  }
+  const by = (a, b) => (a.name || '').localeCompare(b.name || '');
+  return { on: on.sort(by), off: off.sort(by) };
 }
-function present() {
-  const ps = allPlayers(), lobby = !S.cfg || S.cfg.status === 'lobby';
-  return Object.values(ps).filter(p => p.id === me.id || !lobby || now() - p.u < 15 * 60000);
-}
-const baseRole = id => S.cfg?.roles?.[id] || 'hunter';
-function caughtTime(id) {
-  const p = id === me.id ? { caughtAt: S.caughtAt } : S.players[id];
-  const c = S.cfg;
-  if (!p || !p.caughtAt || !c || !c.startAt || p.caughtAt < c.startAt) return null;
-  return p.caughtAt;
+const inGame = () => !!S.cfg && (S.cfg.status === 'running' || S.cfg.status === 'ended');
+const gameIds = () => S.cfg?.players || [];
+const baseRole = id => S.cfg?.roles?.[id] === 'r' ? 'r' : 'h';
+function caughtInfo(id) {
+  const c = S.cfg; if (!c || !c.startAt) return null;
+  let best = null;
+  const r = rec(id);
+  if (r && r.caughtAt && r.caughtAt >= c.startAt) best = { t: r.caughtAt, by: r.caughtBy || null };
+  const hc = c.hostCaught?.[id];
+  if (hc && hc.t >= c.startAt && (!best || hc.t < best.t)) best = { t: hc.t, by: hc.by || null, host: true };
+  return best;
 }
 function role(id) {
-  if (baseRole(id) !== 'runner') return 'hunter';
-  const ph = phase();
-  if (ph === 'lobby' || ph === 'none') return 'runner';
-  return caughtTime(id) ? 'hunter' : 'runner';
+  if (baseRole(id) !== 'r') return 'hunter';
+  if (!inGame()) return 'runner';
+  return caughtInfo(id) ? 'hunter' : 'runner';
 }
 function times() {
   const c = S.cfg; if (!c || !c.startAt) return null;
-  const st = c.settings;
-  const headEnd = c.startAt + st.head * 60000;
-  const endAt = headEnd + st.dur * 60000;
-  const iv = st.ping * 60000;
-  return { start: c.startAt, headEnd, endAt, iv };
+  const s = st();
+  const headEnd = c.startAt + s.head * 60000;
+  return { start: c.startAt, headEnd, endAt: headEnd + s.dur * 60000, iv: s.ping * 60000 };
 }
-function origRunners() { return present().filter(p => baseRole(p.id) === 'runner'); }
-function runnersLeft(at) {
-  return origRunners().filter(p => { const ct = caughtTime(p.id); return !ct || (at && ct > at); });
-}
+const runnerIds = () => gameIds().filter(id => baseRole(id) === 'r');
+const freeRunners = at => runnerIds().filter(id => { const ci = caughtInfo(id); return !ci || (at && ci.t > at); });
 function phase() {
   const c = S.cfg; if (!c) return 'none';
   if (c.status === 'lobby') return 'lobby';
   if (c.status === 'ended') return 'ended';
-  const t = times(); const n = now();
+  const t = times(), n = now();
   if (n >= t.endAt) return 'ended';
-  if (origRunners().length > 0 && runnersLeft().length === 0) return 'ended';
+  if (runnerIds().length && !freeRunners().length) return 'ended';
   return n < t.headEnd ? 'head' : 'hunt';
 }
 function pingIdx() {
@@ -414,149 +668,75 @@ function pingIdx() {
   if (n < t.headEnd) return -1;
   return Math.floor((n - t.headEnd) / t.iv);
 }
-function sighting(r) {
+function pingLeft() {
+  const t = times(), next = t.headEnd + (pingIdx() + 1) * t.iv;
+  return next >= t.endAt ? null : next - now();
+}
+function zoneNow() {
+  const c = S.cfg, z = c?.zone; if (!z || !c.startAt) return null;
+  const t = times();
+  const f = z.shrinkMs <= 0 ? 1 : Math.max(0, Math.min(1, (now() - t.headEnd) / z.shrinkMs));
+  return { lat: z.lat + (z.flat - z.lat) * f, lng: z.lng + (z.flng - z.lng) * f, r: z.r0 + (z.r1 - z.r0) * f, f };
+}
+const graceMs = () => (S.cfg?.zone?.grace ?? st().grace) * 1000;
+function sighting(id) {
   const idx = pingIdx(); if (idx < 0) return null;
-  if (r.ping && r.ping.i === idx && r.ping.s === S.cfg.startAt) return r.ping;
-  const sn = S.snaps[r.id]; if (sn && sn.i === idx) return sn;
-  if (r.ping && r.ping.s === S.cfg.startAt) return r.ping;
+  const r = S.players[id], sn = S.snaps[id], s0 = S.cfg.startAt;
+  const rp = r && r.ping && r.ping.s === s0 ? r.ping : null;
+  if (rp && rp.i === idx) return rp;
+  if (sn && sn.i === idx) return sn;
+  if (rp && (!sn || rp.i >= sn.i)) return rp;
   return sn || null;
 }
-
-function onCfg(prev) {
-  const c = S.cfg;
-  const prevStart = prev?.startAt;
-  if (c.status === 'running' && c.startAt !== prevStart) {
-    S.snaps = {}; S.lastIdx = null; S.endedFor = null;
-    if (S.caughtAt && S.caughtAt < c.startAt) { S.caughtAt = null; S.caughtBy = null; }
-    if (S.ping && S.ping.s !== c.startAt) S.ping = null;
-    if (prev && prev.status === 'lobby') {
-      const r = baseRole(me.id);
-      toast(r === 'runner' ? 'Spiel läuft. Du bist Runner, lauf!' : 'Spiel läuft. Du bist Jäger.', r);
-      beep([[660, .12], [880, .2]]); buzz([200, 100, 200]);
-    }
-    pubMe(true);
-  }
-  if (c.status === 'lobby' && prev && prev.status !== 'lobby') {
-    S.caughtAt = null; S.caughtBy = null; S.ping = null; S.snaps = {}; pubMe(true);
-  }
-  if (S.drawing && !isHost()) S.drawing = false;
-}
-
-function noteCatch(o) {
-  const c = S.cfg; if (!c || !c.startAt || !o.caughtAt || o.caughtAt < c.startAt) return;
-  const k = o.id + ':' + o.caughtAt; if (S.toasted.has(k)) return;
-  S.toasted.add(k);
-  if (now() - o.caughtAt > 60000) return;
-  const by = o.caughtBy === 'zone' ? ' (zu lange außerhalb der Zone)' : o.caughtBy && S.players[o.caughtBy] ? ' von ' + S.players[o.caughtBy].name : '';
-  toast(o.name + ' wurde gefangen' + by + '!', 'hunter');
-  beep([[520, .12], [390, .25]]); buzz(300);
-}
-
-function tickGame() {
-  const ph = phase();
-  zoneTick(ph);
-  if (ph === 'head' || ph === 'hunt') {
-    const idx = pingIdx(), t = times();
-    if (S.lastIdx === null) {
-      S.lastIdx = idx;
-      if (idx >= 0) snapAll(idx, t, true);
-    } else if (idx > S.lastIdx) {
-      S.lastIdx = idx;
-      snapAll(idx, t, false);
-      if (role(me.id) === 'runner') {
-        toast('Ping! Die Jäger sehen jetzt deinen Standort.', 'runner');
-        beep([[300, .25]]); buzz([400]);
-      } else {
-        toast('Ping! Neue Runner-Positionen.', 'hunter');
-        beep([[880, .1], [880, .1], [1175, .22]]); buzz([150, 80, 150, 80, 250]);
-      }
-      render();
-    }
-  }
-  if (ph === 'ended' && S.cfg && S.endedFor !== S.cfg.startAt) {
-    S.endedFor = S.cfg.startAt;
-    const win = winner();
-    const endT = S.cfg.endedAt || times().endAt;
-    if (now() - endT < 60000) {
-      toast(win === 'hunter' ? 'Spiel vorbei. Die Jäger gewinnen!' : 'Spiel vorbei. Die Runner gewinnen!', win);
-      beep([[523, .15], [659, .15], [784, .3]]); buzz([300, 100, 300]);
-    }
-    if (isHost() && S.cfg.status === 'running') {
-      pubCfg({ ...S.cfg, status: 'ended', endedAt: Math.min(now(), times().endAt) });
-    }
-    render();
-  }
-}
-function snapAll(idx, t, initial) {
-  const pt = t.headEnd + idx * t.iv;
-  if (role(me.id) === 'runner' && S.pos) {
-    if (!S.ping || S.ping.i !== idx || S.ping.s !== S.cfg.startAt) {
-      S.ping = { i: idx, s: S.cfg.startAt, lat: S.pos.lat, lng: S.pos.lng, t: S.pos.t };
-      pubMe(true);
-    }
-  }
-  for (const r of Object.values(S.players)) {
-    if (r.id === me.id || role(r.id) !== 'runner' || r.lat == null) continue;
-    if (initial && r.t > pt + 15000) continue;
-    S.snaps[r.id] = { i: idx, lat: r.lat, lng: r.lng, t: r.t };
-  }
-}
-function winner() {
-  const c = S.cfg, t = times();
-  const at = c.status === 'ended' && c.endedAt ? c.endedAt : t.endAt;
-  return runnersLeft(at).length === 0 && origRunners().length > 0 ? 'hunter' : 'runner';
-}
-
-// ---------- Schrumpfzone ----------
-const setv = k => S.cfg?.settings?.[k] ?? DEF_SETTINGS[k];
-function zoneNow() {
-  const c = S.cfg; if (!c || !c.zone || !c.startAt) return null;
-  const t = times(), z = c.zone;
-  const sd = Math.max(0, Math.min(z.shrinkMs, t.endAt - t.headEnd));
-  const f = sd <= 0 ? 1 : Math.max(0, Math.min(1, (now() - t.headEnd) / sd));
-  return { lat: z.lat, lng: z.lng, r: z.r0 + (z.r1 - z.r0) * f, r1: z.r1, f, shrinkEnd: t.headEnd + sd, grace: z.grace };
+function addTrail(id, p) {
+  if (p == null || p.lat == null) return;
+  const a = (S.trail[id] || []).filter(x => x.i !== p.i);
+  a.push({ i: p.i, lat: p.lat, lng: p.lng, t: p.t });
+  S.trail[id] = a.sort((x, y) => x.i - y.i).slice(-4);
 }
 function zoneState(pos) {
   if (!pos) return null;
-  const z = zoneNow(); const area = S.cfg?.settings?.area || [];
-  let out = false, edge = null;
+  const z = zoneNow(), area = st().area || [];
+  let out = false, edge = null, back = null;
   if (z) {
-    const d = haversine(pos, z);
-    edge = z.r - d;
+    const d = hav(pos, z); edge = z.r - d;
     if (d > z.r + Math.min(pos.acc || 0, 25)) out = true;
+    back = { d: Math.max(0, d - z.r), b: brg(pos, z) };
   }
   if (area.length >= 3 && !inPoly(pos, area)) out = true;
-  return { out, edge, z };
+  return { out, edge, z, back };
 }
-function zoneTick(ph) {
-  if (!(ph === 'head' || ph === 'hunt') || !S.pos || now() - S.pos.t > 30000) { S.outSince = null; return; }
-  const zs = zoneState(S.pos);
-  if (!zs || !zs.out) { if (S.outSince) toast('Wieder in der Zone.', ''); S.outSince = null; return; }
-  if (!S.outSince) S.outSince = now();
-  if (now() - (S.lastOob || 0) > 10000) { S.lastOob = now(); beep([[200, .3], [200, .3]]); buzz([500, 200, 500]); }
-  const grace = (S.cfg.zone?.grace ?? setv('zgrace')) * 1000;
-  if (role(me.id) === 'runner' && now() - S.outSince >= grace) { S.outSince = null; beCaught('zone'); }
+const myRole = () => inGame() ? role(me.id) : (baseRole(me.id) === 'r' ? 'runner' : 'hunter');
+const headingOk = () => S.heading != null && now() - S.headingAt < 5000;
+const rel = b => headingOk() ? b - S.heading : b;
+function computeOrder() {
+  const fr = freeRunners();
+  S.order = fr.map(id => { const s = sighting(id); return { id, d: s && S.pos ? hav(S.pos, s) : Infinity, lost: !fresh(id) }; })
+    .sort((a, b) => (a.lost - b.lost) || (a.d - b.d)).map(x => x.id);
+}
+function targets() {
+  const fr = freeRunners();
+  const ord = S.order.filter(id => fr.includes(id));
+  fr.forEach(id => { if (!ord.includes(id)) ord.push(id); });
+  if (!S.target || !fr.includes(S.target)) S.target = ord[0] || null;
+  return ord;
 }
 
-// ---------- Aktionen ----------
+// ================= Aktionen =================
 async function enterRoom(code, create) {
   const name = $('#nameIn').value.trim();
   if (!name) { showStartErr('Gib zuerst deinen Namen ein.'); $('#nameIn').focus(); return; }
   if (!/^[A-Z0-9]{5}$/.test(code)) { showStartErr('Der Code hat 5 Zeichen.'); return; }
   if (!window.isSecureContext || !crypto.subtle) { showStartErr('Die Seite muss über https:// geöffnet werden.'); return; }
   me.name = name; LS.set('mh_name', name);
-  unlockAudio();
+  unlockAudio(); startCompass();
   await joinRoom(code);
-  if (create) {
-    pubCfg({ host: me.id, status: 'lobby', settings: { ...DEF_SETTINGS }, roles: {}, startAt: null, rev: 0 });
-  } else {
-    setTimeout(() => { if (!S.cfg && S.code === code) toast('Noch kein Spiel mit Code ' + code + ' gefunden. Stimmt der Code?', 'hunter'); }, 8000);
-  }
+  if (create) pubCfg({ v: 2, host: me.id, status: 'lobby', settings: { ...DEF }, roles: {}, startAt: null, rev: 0, scores: {}, runnerCount: {}, round: 0 });
+  else setTimeout(() => { if (!S.cfg && S.code === code) toast('Noch kein Spiel mit Code ' + code + ' gefunden. Stimmt der Code?', 'hunter'); }, 8000);
 }
 async function joinRoom(code) {
   S.code = code; LS.set('mh_room', code);
-  S.cfg = null; S.players = {}; S.snaps = {}; S.lastIdx = null; S.restored = false; S.endedFor = null;
-  S.caughtAt = null; S.caughtBy = null; S.ping = null;
+  Object.assign(S, { cfg: null, players: {}, creq: {}, snaps: {}, trail: {}, lastIdx: null, lastPhase: null, restored: false, caughtAt: null, caughtBy: null, ping: null, log: [], pending: {}, seenCatch: new Set(), lost: new Set(), joinedAt: now(), sheet: 'peek', lobbyMin: false, pocket: false });
   await deriveKeys(code);
   try { history.replaceState(null, '', '#' + code); } catch (e) {}
   $('#start').hidden = true; $('#hud').hidden = false; $('#sheet').hidden = false; $('#fab').hidden = false;
@@ -565,6 +745,8 @@ async function joinRoom(code) {
   render();
 }
 function leave() {
+  const c = S.cfg;
+  if (isHost()) { const next = lobbyList().on.find(p => p.id !== me.id); if (next) pubCfg({ ...c, host: next.id }); }
   pub('/p/' + me.id, null, true);
   setTimeout(() => {
     disconnect();
@@ -572,421 +754,1075 @@ function leave() {
     S.geoWatch = null; S.code = null; S.T = null; S.cfg = null; S.players = {};
     LS.del('mh_room');
     try { history.replaceState(null, '', location.pathname); } catch (e) {}
-    $('#start').hidden = false; $('#hud').hidden = true; $('#sheet').hidden = true; $('#fab').hidden = true;
-    S.confirm = null; dyn.clearLayers(); if (meMk) { meMk.remove(); meMk = null; }
+    ['#hud', '#sheet', '#fab', '#pocket', '#reveal', '#modal', '#qr', '#banner', '#startbar', '#vig'].forEach(s => $(s).hidden = true);
+    $('#start').hidden = false; S.confirm = null; clearMap(); $('#edges').innerHTML = '';
   }, 500);
 }
+function fairDraw(ids, n) {
+  const rc = S.cfg.runnerCount || {}, rnd = new Uint32Array(ids.length); crypto.getRandomValues(rnd);
+  const order = ids.map((id, i) => ({ id, k: (rc[id] || 0) * 1e10 + rnd[i] })).sort((a, b) => a.k - b.k);
+  const roles = {}; order.forEach((o, i) => roles[o.id] = i < n ? 'r' : 'h');
+  return roles;
+}
 function startGame() {
+  const s = st(), L = lobbyList(), ids = L.on.map(p => p.id);
+  const roles = {}; ids.forEach(id => roles[id] = S.cfg.roles?.[id] === 'r' ? 'r' : 'h');
   let zone = null;
-  if (setv('zone')) {
-    let ctr = S.pos ? { lat: S.pos.lat, lng: S.pos.lng } : null;
-    const area = S.cfg.settings.area || [];
-    if (!ctr && area.length >= 3) ctr = { lat: area.reduce((a, p) => a + p[0], 0) / area.length, lng: area.reduce((a, p) => a + p[1], 0) / area.length };
-    if (ctr) zone = { lat: +ctr.lat.toFixed(6), lng: +ctr.lng.toFixed(6), r0: setv('zr0'), r1: Math.min(setv('zr1'), setv('zr0')), shrinkMs: setv('zshrink') * 60000, grace: setv('zgrace') };
-    else toast('Kein GPS: Spiel startet ohne Schrumpfzone.', 'hunter');
+  if (s.zone) {
+    let c = S.pos ? { lat: S.pos.lat, lng: S.pos.lng } : null;
+    if (!c && s.area.length >= 3) c = { lat: s.area.reduce((a, p) => a + p[0], 0) / s.area.length, lng: s.area.reduce((a, p) => a + p[1], 0) / s.area.length };
+    if (c) {
+      const r1 = Math.min(s.r1, s.r0), maxOff = Math.max(0, s.r0 - r1) * 0.85;
+      const a = Math.random() * 2 * Math.PI, d = Math.sqrt(Math.random()) * maxOff;
+      const [flat, flng] = offLL(c.lat, c.lng, Math.cos(a) * d, Math.sin(a) * d);
+      zone = { lat: +c.lat.toFixed(6), lng: +c.lng.toFixed(6), flat: +flat.toFixed(6), flng: +flng.toFixed(6), r0: s.r0, r1, shrinkMs: s.shrink / 100 * s.dur * 60000, grace: s.grace };
+    } else toast('Kein GPS: Das Spiel startet ohne Zone.', 'hunter');
   }
-  pubCfg({ ...S.cfg, status: 'running', startAt: now(), endedAt: null, zone });
+  const names = {}; L.on.forEach(p => names[p.id] = p.name);
+  const rc = { ...(S.cfg.runnerCount || {}) }; ids.forEach(id => { if (roles[id] === 'r') rc[id] = (rc[id] || 0) + 1; });
+  pubCfg({ ...S.cfg, status: 'running', startAt: now(), endedAt: null, endType: null, players: ids, names, roles, zone, hostCaught: {}, runnerCount: rc, round: (S.cfg.round || 0) + 1, roundPts: null });
 }
-function endGame() { pubCfg({ ...S.cfg, status: 'ended', endedAt: now() }); }
-function newRound() { pubCfg({ ...S.cfg, status: 'lobby', startAt: null, endedAt: null }); }
-function toggleRole(id) {
-  const roles = { ...(S.cfg.roles || {}) };
-  roles[id] = baseRole(id) === 'runner' ? 'hunter' : 'runner';
-  pubCfg({ ...S.cfg, roles });
+function roundPoints(endAt) {
+  const t = times(), pts = {};
+  for (const id of gameIds()) pts[id] = 0;
+  for (const id of runnerIds()) {
+    const ci = caughtInfo(id), caught = ci && ci.t <= endAt;
+    pts[id] += Math.max(0, Math.floor(((caught ? ci.t : endAt) - t.headEnd) / 60000));
+    if (caught && ci.by && ci.by !== 'zone' && pts[ci.by] != null) pts[ci.by] += 5;
+  }
+  return pts;
 }
-function randMax() { return Math.max(1, present().length - 1); }
-function randomRunners(n) {
-  const ps = present().slice(); if (!ps.length) return;
-  n = Math.max(1, Math.min(n, randMax()));
-  const rnd = new Uint32Array(ps.length); crypto.getRandomValues(rnd);
-  for (let i = ps.length - 1; i > 0; i--) { const j = rnd[i] % (i + 1); [ps[i], ps[j]] = [ps[j], ps[i]]; }
-  const roles = {}; ps.forEach((p, i) => roles[p.id] = i < n ? 'runner' : 'hunter');
-  pubCfg({ ...S.cfg, roles });
-  toast(n === 1 ? 'Runner ausgelost: ' + ps[0].name : n + ' Runner ausgelost', 'runner');
+function finishGame(type) {
+  const c = S.cfg; if (!c || c.status !== 'running') return;
+  const t = times(), endAt = type === 'abort' ? now() : Math.min(now(), t.endAt);
+  const next = { ...c, status: 'ended', endedAt: endAt, endType: type };
+  if (type !== 'abort' && c.scoredFor !== c.startAt) {
+    const pts = roundPoints(endAt), scores = { ...(c.scores || {}) };
+    for (const [id, p] of Object.entries(pts)) scores[id] = (scores[id] || 0) + p;
+    Object.assign(next, { roundPts: pts, scores, scoredFor: c.startAt, names: { ...(c.names || {}) } });
+  } else if (type === 'abort') next.roundPts = null;
+  pubCfg(next);
 }
-function setSetting(k, v) { pubCfg({ ...S.cfg, settings: { ...S.cfg.settings, [k]: v } }); }
+function newRound() {
+  const L = lobbyList(), ids = L.on.map(p => p.id);
+  const n = Math.max(1, Math.min(runnerIds().length || 1, ids.length - 1));
+  const roles = fairDraw(ids, n);
+  pubCfg({ ...S.cfg, status: 'lobby', startAt: null, endedAt: null, endType: null, roles, hostCaught: {}, zone: null });
+  toast('Neue Runde. Rollen fair ausgelost: zuerst, wer seltener Runner war.');
+}
+function myReq(id) { const o = S.creq[id]; return o && S.cfg && o.s === S.cfg.startAt && o.from === me.id && o.ans !== 'yes' && !caughtInfo(id) ? o : null; }
+function checkMyCatch() {
+  const o = S.creq[me.id];
+  if (!o || !S.cfg || o.s !== S.cfg.startAt) return;
+  const ph = phase();
+  if (!o.ans && role(me.id) === 'runner' && !S.answered.has(o.rid) && (ph === 'head' || ph === 'hunt')) showCatchModal(o);
+  else if (S.modalRid === o.rid) hideModal();
+}
 function sendCatch(id) {
-  const p = S.players[id];
-  pub('/ev', { id: rid(12), type: 'catchreq', from: me.id, fromName: me.name, to: id, t: now() }, false);
-  toast('Anfrage an ' + (p ? p.name : 'Runner') + ' gesendet. Er/sie muss bestätigen.', 'hunter');
+  const req = { rid: rid(10), from: me.id, fromName: me.name, to: id, t: now(), s: S.cfg.startAt };
+  S.creq[id] = req;
+  pub('/c/' + id, req, true);
+  log(`Fang gemeldet: ${nameOf(id)}`);
+  toast(`Anfrage an ${nameOf(id)} gesendet. Sie bleibt, bis ${nameOf(id)} antwortet.`, 'hunter');
+  schedule();
+}
+function resendCatch(id) {
+  const o = S.creq[id]; if (!o || o.from !== me.id) return sendCatch(id);
+  const req = { rid: o.rid, from: o.from, fromName: o.fromName, to: o.to, t: now(), s: o.s };
+  S.creq[id] = req; pub('/c/' + id, req, true);
+  toast('Erneut gesendet.', 'hunter'); schedule();
+}
+function onCatchMsg(id, o) {
+  const prev = S.creq[id]; S.creq[id] = o;
+  if (!S.cfg || o.s !== S.cfg.startAt) return;
+  if (id === me.id) { checkMyCatch(); return; }
+  if (o.from === me.id && o.ans === 'no' && (!prev || prev.ans !== 'no')) { toast(`${nameOf(id)} sagt: nicht gefangen. Bei Streit entscheidet der Host.`, 'hunter'); log(`${nameOf(id)} bestreitet den Fang`); }
+  if (o.ans === 'no' && isHost() && o.from !== me.id && (!prev || prev.ans !== 'no')) toast(`${nameOf(id)} bestreitet den Fang von ${o.fromName}. Als Host kannst du entscheiden.`);
+}
+function answerCatch(o, yes) {
+  S.answered.add(o.rid); LS.set('mh_ans', JSON.stringify([...S.answered].slice(-40)));
+  hideModal();
+  pub('/c/' + me.id, { ...o, ans: yes ? 'yes' : 'no', at: now() }, true);
+  if (yes) beCaught(o.from);
+  else { toast('Abgelehnt. Bei Streit entscheidet der Host.'); log(`Fang von ${o.fromName} abgelehnt`); }
+}
+function hostCatch(id, by) {
+  const c = S.cfg, hc = { ...(c.hostCaught || {}) };
+  if (hc[id] || caughtInfo(id)) return;
+  hc[id] = { t: now(), by: by || null };
+  pubCfg({ ...c, hostCaught: hc });
+  toast(`${nameOf(id)} als gefangen gewertet.`);
 }
 function beCaught(by) {
-  S.caughtAt = now(); S.caughtBy = by || null; S.ping = null;
+  if (!S.cfg || (S.caughtAt && S.caughtAt >= S.cfg.startAt)) return;
+  S.caughtAt = now(); S.caughtBy = by || null; S.ping = null; S.outSince = null; S.near = false;
   pubMe(true);
-  toast(by === 'zone' ? 'Zu lange außerhalb der Zone. Du giltst als gefangen und bist jetzt Jäger!' : 'Du wurdest gefangen. Jetzt bist du Jäger!', 'hunter');
-  beep([[440, .15], [330, .3]]); buzz([300, 100, 300]);
-  render();
+  showReveal('switch', by === 'zone' ? 'Zu lange außerhalb der Zone.' : by ? `${nameOf(by)} hat dich erwischt.` : 'Du wurdest gefangen.');
+  play('catch'); buzz([300, 100, 300]); say('Du bist jetzt Jäger.');
+  log(by === 'zone' ? 'Du warst zu lange außerhalb der Zone' : 'Du wurdest gefangen');
+  setSheet('peek'); schedule();
 }
-function showCatchReq(o) {
-  const box = $('#modalBox');
-  box.innerHTML = `<div class="big hunter">Gefangen?</div>
-    <div><b>${esc(o.fromName || 'Ein Jäger')}</b> sagt, er hat dich gefangen. Stimmt das?</div>
-    <div class="row"><button class="btn red" id="mYes" style="flex:1">Ja, gefangen</button><button class="btn" id="mNo" style="flex:1">Nein</button></div>`;
-  $('#modal').hidden = false;
-  beep([[700, .1], [700, .1]]); buzz([200, 100, 200]);
-  $('#mYes').onclick = () => { $('#modal').hidden = true; beCaught(o.from); };
-  $('#mNo').onclick = () => { $('#modal').hidden = true; };
+function onCfg(prev) {
+  const c = S.cfg;
+  if (prev && prev.host !== c.host) {
+    const hn = c.host === me.id ? 'Du bist' : nameOf(c.host) + ' ist';
+    toast(`${hn} jetzt Host.`); log(`${hn} jetzt Host`);
+  }
+  if (c.status === 'running' && c.startAt !== prev?.startAt) {
+    if (S.caughtAt && S.caughtAt < c.startAt) { S.caughtAt = null; S.caughtBy = null; }
+    if (S.ping && S.ping.s !== c.startAt) S.ping = null;
+    pubMe(true);
+  }
+  if (c.status === 'lobby' && prev && prev.status !== 'lobby') { S.caughtAt = null; S.caughtBy = null; S.ping = null; pubMe(true); }
+  const hc = c.hostCaught?.[me.id];
+  if (hc && c.startAt && hc.t >= c.startAt && (!S.caughtAt || S.caughtAt < c.startAt) && c.status === 'running') {
+    S.caughtAt = hc.t; S.caughtBy = hc.by || null; S.ping = null; pubMe(true);
+    hideModal();
+    showReveal('switch', 'Der Host hat dich als gefangen gewertet.');
+  }
+  if (S.drawing && !isHost()) S.drawing = false;
 }
 
-// ---------- Geräte ----------
+// ================= Takt =================
+function tick() {
+  if (!S.T) return;
+  const ph = phase();
+  if (S.cfg) {
+    hostDuties(ph);
+    if (ph !== S.lastPhase) onPhase(S.lastPhase, ph);
+    if (ph === 'head' || ph === 'hunt') gameTick(ph);
+    else { S.near = false; S.outSince = null; }
+    noteCatches(); noteLost(ph); checkMyCatch();
+  }
+  render();
+}
+function hostDuties(ph) {
+  const c = S.cfg;
+  if (!isHost()) { maybeTakeover(); return; }
+  if (ph === 'ended' && c.status === 'running') finishGame(freeRunners().length ? 'time' : 'all');
+  if (ph === 'head' || ph === 'hunt') {
+    const add = lobbyList().on.filter(p => !c.players.includes(p.id) && now() - p.u < 20000).map(p => p.id);
+    if (add.length) {
+      const names = { ...(c.names || {}) }; add.forEach(id => names[id] = nameOf(id));
+      pubCfg({ ...c, players: [...c.players, ...add], names });
+      add.forEach(id => log(`${nameOf(id)} spielt als Jäger mit`));
+    }
+  }
+}
+function maybeTakeover() {
+  const c = S.cfg; if (!c || now() - S.joinedAt < 20000) return;
+  const hr = S.players[c.host];
+  if (hr && now() - hr.u < HOST_TIMEOUT) return;
+  const cands = [me.id, ...Object.values(S.players).filter(p => p.id !== c.host && now() - p.u < STALE).map(p => p.id)].sort();
+  if (cands[0] !== me.id) return;
+  pubCfg({ ...c, host: me.id });
+}
+function onPhase(prev, ph) {
+  S.lastPhase = ph;
+  if (prev === null) {
+    if (ph === 'lobby') setSheet('peek');
+    if ((ph === 'head' || ph === 'hunt') && now() - S.cfg.startAt < 20000) showReveal('start');
+    if (ph === 'ended') setSheet('half');
+    return;
+  }
+  if ((ph === 'head' || ph === 'hunt') && (prev === 'lobby' || prev === 'none')) onStart(ph);
+  if (ph === 'hunt' && prev === 'head') onHuntStart();
+  if (ph === 'ended') onEnded();
+  if (ph === 'lobby' && prev !== 'none') { S.pocket = false; S.lobbyMin = false; S.confirm = null; hideModal(); $('#reveal').hidden = true; log('Neue Runde'); }
+}
+function onStart(ph) {
+  Object.assign(S, { snaps: {}, trail: {}, lastIdx: null, target: null, pending: {}, order: [], near: false, outSince: null, pocket: false, confirm: null, follow: true, fitUntil: 0, lastSec: -1 });
+  S.log = [];
+  log('Spiel gestartet');
+  setSheet('peek');
+  showReveal('start');
+  play('start'); buzz([200, 100, 200]);
+  const H = myRole() === 'hunter';
+  say(H ? 'Du bist Jäger. Augen zu und warten.' : 'Du bist Runner. Lauf!');
+  if (S.pos) centerOn([S.pos.lat, S.pos.lng], 17);
+  if (ph === 'hunt') onHuntStart();
+}
+function onHuntStart() {
+  log('Die Jagd beginnt');
+  play('start'); buzz([300, 100, 300]);
+  say('Die Jagd beginnt.');
+  if (myRole() === 'hunter') showReveal('hunt');
+  else banner('DIE JAGD BEGINNT', 'Gleich sehen dich die Jäger', 'red', 4000);
+}
+function onEnded() {
+  S.pocket = false; S.confirm = null; S.near = false; hideModal(); $('#reveal').hidden = true;
+  setSheet('half');
+  const ty = endType();
+  play(ty === 'abort' ? 'tick' : 'win');
+  say(ty === 'abort' ? 'Spiel abgebrochen.' : ty === 'all' ? 'Spiel vorbei. Die Jäger gewinnen.' : 'Spiel vorbei. Die Runner gewinnen.');
+  log(ty === 'abort' ? 'Spiel abgebrochen' : 'Spiel vorbei');
+  S.endFitted = null;
+}
+const endType = () => S.cfg.endType || (freeRunners().length ? 'time' : 'all');
+function gameTick(ph) {
+  const my = myRole();
+  const idx = pingIdx();
+  if (S.lastIdx === null) { S.lastIdx = idx; if (idx >= 0) { snapAll(idx, true); computeOrder(); } }
+  else if (idx > S.lastIdx) { S.lastIdx = idx; snapAll(idx, false); onPing(idx); }
+  if (ph === 'hunt' && my === 'runner') {
+    const pl = pingLeft(), sec = pl == null ? -1 : Math.ceil(pl / 1000);
+    if (sec !== S.lastSec) {
+      S.lastSec = sec;
+      if (sec === 10) { play('warn'); buzz(80); say('Ping in 10 Sekunden.'); }
+      else if (sec >= 1 && sec <= 3) play('tick');
+    }
+  }
+  nearTick(ph, my);
+  zoneTick(my);
+}
+function snapAll(idx, initial) {
+  const t = times(), pt = t.headEnd + idx * t.iv;
+  if (myRole() === 'runner' && S.pos && (!S.ping || S.ping.i !== idx || S.ping.s !== S.cfg.startAt)) {
+    S.ping = { i: idx, s: S.cfg.startAt, lat: S.pos.lat, lng: S.pos.lng, t: S.pos.t };
+    pubMe(true);
+  }
+  for (const id of runnerIds()) {
+    const r = S.players[id];
+    if (id === me.id || !r || r.lat == null || role(id) !== 'runner') continue;
+    if (initial && r.t > pt + 15000) continue;
+    S.snaps[id] = { i: idx, lat: r.lat, lng: r.lng, t: r.t };
+    addTrail(id, S.snaps[id]);
+  }
+}
+function onPing(idx) {
+  if (myRole() === 'hunter') {
+    S.newUntil = now() + NEW_MS;
+    computeOrder();
+    play('pingH'); buzz([120, 60, 120, 60, 200]);
+    const parts = S.order.map(id => {
+      const s = sighting(id);
+      if (!fresh(id)) return `${nameOf(id)}, Signal weg`;
+      if (!s || !S.pos) return `${nameOf(id)}, unbekannt`;
+      return `${nameOf(id)}, ${r10(hav(S.pos, s))} Meter, ${dl(brg(S.pos, s))}`;
+    });
+    if (parts.length) say('Ping. ' + parts.join('. ') + '.');
+    banner(`PING ${idx + 1}`, 'Neue Positionen auf der Karte', '', 4000);
+    flash();
+    log(`Ping ${idx + 1}: ` + (S.order.map(id => { const s = sighting(id); return !fresh(id) ? `${nameOf(id)} ohne Signal` : s && S.pos ? `${nameOf(id)} ${dn(brg(S.pos, s))} ${fmtD(hav(S.pos, s))}` : nameOf(id); }).join(', ') || 'keine Runner'));
+    if (S.follow && !S.pocket) fitPings();
+  } else {
+    play('pingR'); buzz(400); say('Ping. Die Jäger sehen dich jetzt.');
+    banner('GEPINGT', 'Die Jäger sehen dich hier', 'light', 4000);
+    log(`Ping ${idx + 1}: Die Jäger haben dich gesehen`);
+  }
+}
+function nearTick(ph, my) {
+  if (ph !== 'hunt' || my !== 'runner' || !S.pos) { S.near = false; return; }
+  let min = Infinity;
+  for (const id of gameIds()) {
+    if (id === me.id || role(id) !== 'hunter') continue;
+    const r = S.players[id];
+    if (!r || r.lat == null || now() - r.u > 20000) continue;
+    min = Math.min(min, hav(S.pos, r));
+  }
+  const near = min < NEAR_M;
+  if (near && (!S.near || now() - S.nearBuzz > 15000)) { S.nearBuzz = now(); buzz([200, 100, 200]); if (S.nearSound) play('near'); }
+  S.near = near;
+}
+function zoneTick(my) {
+  if (!S.pos) { S.outSince = null; return; }
+  const zs = zoneState(S.pos);
+  if (!zs || !zs.out) { if (S.outSince && my === 'runner') { toast('Wieder in der Zone.'); log('Wieder in der Zone'); } S.outSince = null; return; }
+  if (!S.outSince) { S.outSince = now(); if (my === 'runner') log('Außerhalb der Zone'); }
+  if (my !== 'runner') return;
+  if (now() - S.lastOob > 10000) { S.lastOob = now(); play('zone'); buzz([500, 200, 500]); }
+  const left = graceMs() - (now() - S.outSince);
+  if (now() - S.lastZoneSay > 15000) { S.lastZoneSay = now(); say(`Zurück in die Zone. ${Math.max(0, Math.ceil(left / 1000))} Sekunden.`); }
+  if (left <= 0) { S.outSince = null; beCaught('zone'); }
+}
+function noteCatches() {
+  if (!inGame()) return;
+  for (const id of runnerIds()) {
+    const ci = caughtInfo(id); if (!ci) continue;
+    const k = id + ':' + ci.t; if (S.seenCatch.has(k)) continue;
+    S.seenCatch.add(k);
+    if (now() - ci.t > 90000) continue;
+    const by = ci.by === 'zone' ? 'Zone' : ci.by ? nameOf(ci.by) : null;
+    const txt = `${nameOf(id)} gefangen` + (by ? ` (${by})` : '') + (ci.host ? ', Host-Entscheid' : '');
+    if (id !== me.id) { log(txt); toast(txt + '!', 'hunter'); play('catch'); say(`${nameOf(id)} gefangen.`); }
+  }
+}
+function noteLost(ph) {
+  if (!(ph === 'head' || ph === 'hunt') || now() - S.joinedAt < 15000) return;
+  for (const id of gameIds()) {
+    if (id === me.id) continue;
+    const lost = !fresh(id);
+    if (lost && !S.lost.has(id)) { S.lost.add(id); log(`${nameOf(id)}: Signal weg`); if (role(id) === 'runner' && myRole() === 'hunter') toast(`${nameOf(id)} hat kein Signal mehr.`, 'hunter'); }
+    else if (!lost && S.lost.has(id)) { S.lost.delete(id); log(`${nameOf(id)}: Signal wieder da`); }
+  }
+}
+function log(txt) { S.log.unshift({ t: now(), txt }); if (S.log.length > 40) S.log.pop(); }
+
+// ================= Geräte: Ton, Sprache, Vibration, Bildschirm, GPS, Kompass =================
 let AC = null;
 function unlockAudio() {
   try {
     if (navigator.audioSession) navigator.audioSession.type = 'playback';
-    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
-    AC.resume();
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)(); AC.resume();
     const o = AC.createOscillator(), g = AC.createGain(); g.gain.value = 0.0001; o.connect(g).connect(AC.destination); o.start(); o.stop(AC.currentTime + 0.05);
   } catch (e) {}
 }
-function beep(pattern) {
-  if (!S.sound || !AC) return;
+function tone(f, t, d, type = 'sine', vol = .25, f2) {
+  const o = AC.createOscillator(), g = AC.createGain(), t0 = AC.currentTime + .02 + t;
+  o.type = type; o.frequency.setValueAtTime(f, t0); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t0 + d);
+  g.gain.setValueAtTime(.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0 + .012); g.gain.exponentialRampToValueAtTime(.0001, t0 + d);
+  o.connect(g).connect(AC.destination); o.start(t0); o.stop(t0 + d + .05);
+}
+const SOUNDS = {
+  warn: () => [0, .35, .7].forEach(t => tone(1500, t, .05, 'square', .12)),
+  tick: () => tone(1500, 0, .05, 'square', .09),
+  pingH: () => { tone(660, 0, .12, 'triangle', .32); tone(880, .13, .12, 'triangle', .32); tone(1320, .26, .26, 'triangle', .32); },
+  pingR: () => { tone(190, 0, .2, 'sine', .6, 120); tone(190, .26, .28, 'sine', .6, 105); },
+  near: () => [0, .9].forEach(t => { tone(72, t, .13, 'sine', .7); tone(62, t + .2, .16, 'sine', .6); }),
+  zone: () => [0, 1, 2, 3].forEach(i => tone(i % 2 ? 520 : 760, i * .28, .24, 'sawtooth', .11)),
+  catch: () => { tone(880, 0, .12, 'triangle', .3); tone(660, .14, .12, 'triangle', .3); tone(440, .28, .32, 'triangle', .3); },
+  start: () => { tone(440, 0, .1, 'square', .12); tone(660, .12, .1, 'square', .12); tone(990, .24, .38, 'square', .14); },
+  win: () => [523, 659, 784, 1046].forEach((f, i) => tone(f, i * .15, i === 3 ? .5 : .14, 'triangle', .3))
+};
+function play(k) { if (!S.sound || !AC) return; try { AC.resume(); SOUNDS[k] && SOUNDS[k](); } catch (e) {} }
+function say(t) {
+  if (!S.voice) return;
   try {
-    AC.resume();
-    let t = AC.currentTime + 0.02;
-    for (const [f, d] of pattern) {
-      const o = AC.createOscillator(), g = AC.createGain();
-      o.type = 'square'; o.frequency.value = f;
-      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.22, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
-      o.connect(g).connect(AC.destination); o.start(t); o.stop(t + d + 0.03); t += d + 0.06;
-    }
+    const ss = window.speechSynthesis; if (!ss) return;
+    ss.cancel();
+    const u = new SpeechSynthesisUtterance(t); u.lang = 'de-DE'; u.rate = 1.05;
+    const v = ss.getVoices().find(x => /^de/i.test(x.lang)); if (v) u.voice = v;
+    ss.speak(u);
   } catch (e) {}
 }
 function buzz(p) { try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) {} }
-
 let WL = null, wakeTried = false;
 async function keepAwake() {
   wakeTried = true;
   try {
     if ('wakeLock' in navigator && document.visibilityState === 'visible' && !WL) {
       WL = await navigator.wakeLock.request('screen');
-      WL.addEventListener('release', () => { WL = null; renderHud(); });
+      WL.addEventListener('release', () => { WL = null; schedule(); });
     }
   } catch (e) { WL = null; }
-  renderHud();
+  schedule();
 }
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && S.T) { keepAwake(); pubMe(true); if (AC) AC.resume(); }
 });
-
 function startGeo() {
-  if (!navigator.geolocation) { S.geoErr = 'Dein Browser kann keinen Standort liefern.'; renderHud(); return; }
+  if (!navigator.geolocation) { S.geoErr = 'Dein Browser kann keinen Standort liefern.'; return; }
   if (S.geoWatch != null) return;
   S.geoWatch = navigator.geolocation.watchPosition(p => {
     S.pos = { lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy), t: now() };
     S.geoErr = null;
-    if (!S.centered) { map.setView([S.pos.lat, S.pos.lng], 17); S.centered = true; }
-    pubMe(false);
-    render();
+    if (!S.centered) { S.centered = true; centerOn([S.pos.lat, S.pos.lng], 17, false); }
+    else followTick();
+    pubMe(false); schedule();
   }, e => {
     S.geoErr = e.code === 1
-      ? 'Standort blockiert. iPhone: Einstellungen › Datenschutz › Ortungsdienste › Safari-Websites › „Beim Verwenden“. Dann Seite neu laden.'
+      ? 'Standort blockiert. iPhone: Einstellungen › Datenschutz › Ortungsdienste › Safari-Websites › „Beim Verwenden“. Dann neu laden.'
       : 'Kein GPS-Signal. Geh ins Freie oder warte kurz.';
-    renderHud();
+    schedule();
   }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 });
 }
+function startCompass() {
+  const h = e => {
+    let hd = null;
+    if (typeof e.webkitCompassHeading === 'number' && !isNaN(e.webkitCompassHeading)) hd = e.webkitCompassHeading;
+    else if (e.absolute && e.alpha != null) hd = (360 - e.alpha) % 360;
+    if (hd != null) { S.heading = hd; S.headingAt = now(); }
+  };
+  try {
+    if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      DeviceOrientationEvent.requestPermission().then(r => { if (r === 'granted') addEventListener('deviceorientation', h); }).catch(() => {});
+    } else if ('ondeviceorientationabsolute' in window) addEventListener('deviceorientationabsolute', h);
+    else addEventListener('deviceorientation', h);
+  } catch (e) {}
+}
 
-// ---------- Karte ----------
+// ================= Karte =================
 const map = L.map('map', { zoomControl: false, attributionControl: true }).setView([51.1, 10.4], 6);
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
-map.attributionControl.setPosition('topleft').setPrefix(false);
-const dyn = L.layerGroup().addTo(map);
-let meMk = null, meAcc = null;
-map.on('click', e => {
-  if (!S.drawing) return;
-  S.draft.push([+e.latlng.lat.toFixed(6), +e.latlng.lng.toFixed(6)]);
-  render();
-});
-
-function renderMap() {
-  dyn.clearLayers();
-  const ph = phase();
-  const myRole = ph === 'lobby' || ph === 'none' ? baseRole(me.id) : role(me.id);
-  // Spielfeld
-  const area = S.drawing ? S.draft : (S.cfg?.settings?.area || []);
-  if (area.length >= 3) L.polygon(area, { color: COL.accent, weight: 2, dashArray: S.drawing ? '6 6' : null, fillOpacity: .05, interactive: false }).addTo(dyn);
-  else if (area.length === 2) L.polyline(area, { color: COL.accent, weight: 2, dashArray: '6 6', interactive: false }).addTo(dyn);
-  const ph0 = phase();
-  if (ph0 === 'head' || ph0 === 'hunt') {
-    const z = zoneNow();
-    if (z) {
-      L.circle([z.lat, z.lng], { radius: z.r, color: COL.accent, weight: 3, fillOpacity: .04, interactive: false }).addTo(dyn);
-      if (z.f < 1) L.circle([z.lat, z.lng], { radius: z.r1, color: COL.accent, weight: 1.5, dashArray: '4 6', fill: false, interactive: false }).addTo(dyn);
-    }
-  } else if (ph0 === 'lobby' && setv('zone') && !S.drawing) {
-    const hp = allPlayers()[S.cfg.host];
-    if (hp && hp.lat != null) {
-      L.circle([hp.lat, hp.lng], { radius: setv('zr0'), color: COL.accent, weight: 2, dashArray: '8 6', fillOpacity: .03, interactive: false }).addTo(dyn);
-      L.circle([hp.lat, hp.lng], { radius: Math.min(setv('zr1'), setv('zr0')), color: COL.accent, weight: 1.5, dashArray: '4 6', fill: false, interactive: false }).addTo(dyn);
-    }
+map.attributionControl.setPrefix(false).setPosition('bottomleft');
+const MK = new Map(), LN = new Map(); let gen = 0;
+let meAcc = null, zoneC = null, zonePrev = null, areaPoly = null;
+function upsert(key, ll, html, z = 0) {
+  let m = MK.get(key);
+  if (!m) {
+    m = L.marker(ll, { icon: L.divIcon({ className: 'mkw', html, iconSize: null }), interactive: false, keyboard: false, zIndexOffset: z }).addTo(map);
+    m._h = html; MK.set(key, m);
+  } else {
+    const c = m.getLatLng(); if (c.lat !== ll[0] || c.lng !== ll[1]) m.setLatLng(ll);
+    if (m._h !== html) { m.setIcon(L.divIcon({ className: 'mkw', html, iconSize: null })); m._h = html; }
   }
-  if (S.drawing) area.forEach(pt => L.marker(pt, { icon: L.divIcon({ className: '', html: '<div class="mk-v"></div>', iconSize: [12, 12] }), interactive: false }).addTo(dyn));
+  m._g = gen; return m;
+}
+function line(key, lls, opts) {
+  let l = LN.get(key);
+  const sig = JSON.stringify(lls);
+  if (!l) { l = L.polyline(lls, { interactive: false, ...opts }).addTo(map); l._s = sig; LN.set(key, l); }
+  else if (l._s !== sig) { l.setLatLngs(lls); l._s = sig; }
+  l._g = gen;
+}
+function sweep() {
+  for (const [k, m] of MK) if (m._g !== gen) { m.remove(); MK.delete(k); }
+  for (const [k, l] of LN) if (l._g !== gen) { l.remove(); LN.delete(k); }
+}
+function clearMap() { gen++; sweep(); [meAcc, zoneC, zonePrev, areaPoly].forEach(x => x && x.remove()); meAcc = zoneC = zonePrev = areaPoly = null; }
+map.on('click', e => { if (!S.drawing) return; S.draft.push([+e.latlng.lat.toFixed(6), +e.latlng.lng.toFixed(6)]); render(); });
+map.on('dragstart', () => { if (S.follow) { S.follow = false; updFab(); } });
+map.on('move zoom', () => { if (!S.rqE) { S.rqE = true; requestAnimationFrame(() => { S.rqE = false; renderEdges(); }); } });
+const topH = () => $('#hud').hidden ? 0 : $('#hud').offsetHeight;
+const sheetH = () => $('#sheet').hidden ? 0 : (parseFloat($('#sheet').style.height) || $('#sheet').offsetHeight);
+function centerOn(ll, zoom, anim = true) {
+  const z = zoom ?? Math.max(map.getZoom(), 16);
+  const dy = (topH() - sheetH()) / 2;
+  const p = map.project(L.latLng(ll), z).subtract([0, dy]);
+  const target = map.unproject(p, z);
+  if (z === map.getZoom() && map.latLngToContainerPoint(target).distanceTo(map.latLngToContainerPoint(map.getCenter())) < 3) return;
+  map.setView(target, z, { animate: anim });
+}
+function fitLL(lls) {
+  if (lls.length < 2) return;
+  map.fitBounds(L.latLngBounds(lls), { paddingTopLeft: [28, topH() + 24], paddingBottomRight: [76, sheetH() + 24], maxZoom: 17, animate: true });
+}
+function fitPings() {
+  const lls = []; if (S.pos) lls.push([S.pos.lat, S.pos.lng]);
+  for (const id of freeRunners()) { const s = sighting(id); if (s) lls.push([s.lat, s.lng]); }
+  if (lls.length > 1) { S.fitUntil = now() + 8000; fitLL(lls); }
+}
+function followTick() { if (S.follow && S.pos && now() > S.fitUntil && !S.drawing) centerOn([S.pos.lat, S.pos.lng]); }
+function personHtml(id, r, opts = {}) {
+  const col = hashCol(id), cls = r === 'runner' ? 'r' : 'h';
+  const style = opts.lobby ? ` style="background:${col};box-shadow:0 0 0 2px ${col}"` : '';
+  return `<div class="mi"><div class="mp ${cls}${opts.stale ? ' stale' : ''}"${style}>${esc(ini(nameOf(id)))}</div><span class="lb">${esc(nameOf(id))} <i data-b="pl-${id}"></i></span></div>`;
+}
+function renderMap() {
+  gen++;
+  const ph = phase(), my = myRole(), s = st(), v = {};
   // Ich
   if (S.pos) {
     const ll = [S.pos.lat, S.pos.lng];
-    const cls = 'mk-me ' + (ph === 'lobby' ? '' : myRole);
-    if (!meMk) {
-      meAcc = L.circle(ll, { radius: S.pos.acc || 10, color: COL.accent, weight: 1, fillOpacity: .06, interactive: false }).addTo(map);
-      meMk = L.marker(ll, { icon: L.divIcon({ className: '', html: `<div class="${cls}"></div>`, iconSize: [20, 20] }), zIndexOffset: 1000, interactive: false }).addTo(map);
-      meMk._cls = cls;
-    } else {
-      meMk.setLatLng(ll); meAcc.setLatLng(ll).setRadius(S.pos.acc || 10);
-      if (meMk._cls !== cls) { meMk.setIcon(L.divIcon({ className: '', html: `<div class="${cls}"></div>`, iconSize: [20, 20] })); meMk._cls = cls; }
-    }
+    const m = upsert('me', ll, `<div class="mi"><div class="mme"><div class="cone"></div><div class="dot"></div></div></div>`, 1000);
+    const cone = m.getElement()?.querySelector('.cone');
+    if (cone) { cone.hidden = !headingOk(); if (headingOk()) cone.style.transform = `rotate(${Math.round(S.heading)}deg)`; }
+    if (!meAcc) meAcc = L.circle(ll, { radius: S.pos.acc || 10, color: COL.zone, weight: 1, fillOpacity: .06, interactive: false }).addTo(map);
+    else { meAcc.setLatLng(ll); meAcc.setRadius(S.pos.acc || 10); }
   }
-  // Andere
-  for (const p of present()) {
-    if (p.id === me.id) continue;
-    const r = role(p.id);
-    const showLive = ph === 'lobby' || ph === 'ended' || (r === myRole);
-    if (showLive && p.lat != null) {
-      const stale = now() - p.u > STALE_MS;
-      L.marker([p.lat, p.lng], { icon: L.divIcon({ className: '', html: `<div class="mk ${r}${stale ? ' stale' : ''}"><span>${esc((p.name || '?')[0].toUpperCase())}</span></div>`, iconSize: [22, 22] }), interactive: false })
-        .bindTooltip(esc(p.name), { permanent: true, direction: 'right', offset: [12, 0], className: 'nm' }).addTo(dyn);
-    } else if (myRole === 'hunter' && r === 'runner' && ph === 'hunt') {
-      const s = sighting(p); if (!s || s.lat == null) continue;
-      L.marker([s.lat, s.lng], { icon: L.divIcon({ className: '', html: '<div class="mk-ping"><i></i></div>', iconSize: [26, 26] }), interactive: false })
-        .bindTooltip(esc(p.name) + ' · ' + ago(s.t), { permanent: true, direction: 'right', offset: [14, 0], className: 'nm' }).addTo(dyn);
-    }
-  }
-}
-
-// ---------- Oberfläche ----------
-function renderHud() {
-  if (!S.T) return;
-  const ph = phase(), t = times();
-  const myRole = ph === 'lobby' || ph === 'none' ? null : role(me.id);
-  const pill = $('#rolePill');
-  pill.className = 'pill ' + (myRole || 'lobby');
-  pill.textContent = myRole === 'runner' ? 'Runner' : myRole === 'hunter' ? 'Jäger' : 'Lobby';
-  let clock = '--:--', lbl = 'Warte auf Start';
-  if (ph === 'none') lbl = 'Verbinde …';
-  if (ph === 'head') { clock = mmss(t.headEnd - now()); lbl = myRole === 'runner' ? 'Vorsprung' : 'Jagd startet in'; }
-  if (ph === 'hunt') { clock = mmss(t.endAt - now()); lbl = 'Restzeit'; }
-  if (ph === 'ended') { clock = 'ENDE'; lbl = winner() === 'hunter' ? 'Jäger gewinnen' : 'Runner gewinnen'; }
-  $('#clock').textContent = clock; $('#clockLbl').textContent = lbl;
-  const pb = $('#pingBox');
-  if (ph === 'hunt') {
-    const idx = pingIdx(); const next = t.headEnd + (idx + 1) * t.iv;
-    const left = Math.min(next, t.endAt) - now();
-    pb.hidden = false; $('#pingTxt').textContent = next > t.endAt ? '—' : mmss(left);
-    $('#pingRing').style.strokeDashoffset = String(100.5 * (1 - Math.max(0, Math.min(1, left / t.iv))));
-  } else if (ph === 'head') {
-    pb.hidden = false; $('#pingTxt').textContent = mmss(t.headEnd - now()); $('#pingRing').style.strokeDashoffset = '0';
-  } else pb.hidden = true;
-  // Status
-  const ok = netOk();
-  $('#dNet').className = 'dot ' + (ok ? 'ok' : 'bad'); $('#tNet').textContent = ok ? 'Online' : 'Offline';
-  const g = S.pos && now() - S.pos.t < 30000;
-  $('#dGps').className = 'dot ' + (S.geoErr ? 'bad' : g ? (S.pos.acc > 40 ? 'mid' : 'ok') : 'mid');
-  $('#tGps').textContent = g ? 'GPS ±' + S.pos.acc + ' m' : 'GPS …';
-  $('#dWake').className = 'dot ' + (WL ? 'ok' : 'mid'); $('#tWake').textContent = WL ? 'Display an' : 'Auto-Sperre?';
-  // Warnungen
-  const al = [];
-  if (S.geoErr) al.push(['bad', S.geoErr]);
-  if (!ok && S.clients.length) al.push(['bad', 'Keine Verbindung zum Server. Prüfe dein mobiles Internet.']);
-  if (ph === 'head' || ph === 'hunt') {
-    const zs = zoneState(S.pos);
-    if (zs && zs.out) {
-      if (role(me.id) === 'runner' && S.outSince) {
-        const left = (S.cfg.zone?.grace ?? setv('zgrace')) * 1000 - (now() - S.outSince);
-        al.push(['bad', 'Außerhalb der Zone! Zurück in ' + mmss(left) + ', sonst giltst du als gefangen.']);
-      } else al.push(['bad', 'Du bist außerhalb der Zone! Geh zurück.']);
-    } else if (zs && zs.edge != null && zs.edge < 40 && zs.z.f < 1) {
-      al.push(['', 'Die Zone wird kleiner. Du bist nur ' + Math.max(0, Math.round(zs.edge)) + ' m vom Rand entfernt.']);
-    }
-  }
-  if (wakeTried && !WL && (ph === 'head' || ph === 'hunt')) al.push(['', 'Bildschirm muss anbleiben. Stell die Auto-Sperre auf „Nie“.']);
-  const html = al.map(([c, m]) => `<div class="alert ${c}">${esc(m)}</div>`).join('');
-  if ($('#alerts')._h !== html) { $('#alerts').innerHTML = html; $('#alerts')._h = html; }
-}
-
-function plRow(p, opts = {}) {
-  const r = opts.role || role(p.id);
-  const isMe = p.id === me.id;
-  const stale = !isMe && now() - p.u > STALE_MS;
-  const subTxt = opts.sub != null ? opts.sub : (isMe ? 'Du' : stale ? 'Kein Signal ' + ago(p.u) : 'Online');
-  return `<${opts.btn ? 'button' : 'div'} class="pl ${r}${opts.out ? ' out' : ''}" ${opts.btn ? `data-act="${opts.btn}" data-id="${esc(p.id)}"` : ''}>
-    <i class="ic"></i>
-    <span class="nm">${esc(p.name || '?')}${p.id === S.cfg?.host ? ' ★' : ''}<span class="sub">${esc(subTxt)}</span></span>
-    ${opts.right ?? `<span class="tag">${r === 'runner' ? 'Runner' : 'Jäger'}</span>`}
-  </${opts.btn ? 'button' : 'div'}>`;
-}
-
-function stepper(k, val, unit, opts) {
-  const host = isHost();
-  return `<div class="set"><div>${opts.label}</div>${host
-    ? `<div class="step"><button data-act="dec" data-k="${k}" aria-label="weniger">−</button><b>${val} ${unit}</b><button data-act="inc" data-k="${k}" aria-label="mehr">+</button></div>`
-    : `<b style="font-family:var(--display)">${val} ${unit}</b>`}</div>`;
-}
-
-function renderSheet() {
-  if (!S.T) return;
-  const ph = phase(); const host = isHost(); let h = '';
-  const ps = present().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-
-  if (ph === 'none') {
-    h = `<div class="sec keep"><div class="h">Raum ${esc(S.code)}</div><div class="note">Verbinde mit dem Spiel …</div></div>
-      <button class="btn ghost wide" data-act="leave">Zurück</button>`;
-  } else if (S.drawing) {
-    h = `<div class="sec keep"><div class="h">Spielfeld zeichnen <span>${S.draft.length} Ecken</span></div>
-      <div class="note">Tippe auf die Karte, um Ecken zu setzen. Oder lauf zur Ecke und tippe „Mein Standort“.</div>
-      <div class="row"><button class="btn sm" data-act="vHere">Mein Standort</button><button class="btn sm" data-act="vUndo" ${S.draft.length ? '' : 'disabled'}>Rückgängig</button><button class="btn sm" data-act="vClear" ${S.draft.length ? '' : 'disabled'}>Löschen</button></div>
-      <div class="row"><button class="btn pri" style="flex:1" data-act="vDone" ${S.draft.length === 0 || S.draft.length >= 3 ? '' : 'disabled'}>Fertig</button><button class="btn ghost" data-act="vCancel">Abbrechen</button></div></div>`;
-  } else if (ph === 'lobby') {
-    const st = S.cfg.settings; const runners = ps.filter(p => baseRole(p.id) === 'runner').length; const hunters = ps.length - runners;
-    const canStart = runners >= 1 && hunters >= 1;
-    h += `<div class="sec keep"><div class="h">Raum-Code <span>${ps.length} Spieler</span></div>
-      <div class="code"><b>${esc(S.code)}</b><button class="btn sm" data-act="share">Einladen</button></div></div>`;
-    h += `<div class="sec"><div class="h">Spieler${host ? ' <span>Tippen = Rolle wechseln</span>' : ''}</div><div class="list">
-      ${ps.map(p => plRow(p, { role: baseRole(p.id), btn: host ? 'role' : null })).join('')}</div>
-      </div>`;
-    if (host) {
-      const rn = Math.min(S.randN || 1, randMax());
-      h += `<div class="sec"><div class="h">Auslosen</div>
-        <div class="set"><div>Anzahl Runner</div><div class="step"><button data-act="rdec" aria-label="weniger" ${rn <= 1 ? 'disabled' : ''}>−</button><b>${rn}</b><button data-act="rinc" aria-label="mehr" ${rn >= randMax() ? 'disabled' : ''}>+</button></div></div>
-        <button class="btn" data-act="rand">${rn === 1 ? '1 Runner' : rn + ' Runner'} zufällig auslosen</button></div>`;
-    }
-    h += `<div class="sec"><div class="h">Regeln</div><div>
-      ${stepper('ping', st.ping, 'min', { label: 'Ping alle' })}
-      ${stepper('head', st.head, 'min', { label: 'Vorsprung Runner' })}
-      ${stepper('dur', st.dur, 'min', { label: 'Spieldauer' })}
-      <div class="set"><div>Schrumpfzone</div>${host
-        ? `<button class="btn sm" data-act="ztog">${setv('zone') ? 'An' : 'Aus'}</button>`
-        : `<b style="font-family:var(--display)">${setv('zone') ? 'An' : 'Aus'}</b>`}</div>
-      ${setv('zone') ? `${stepper('zr0', setv('zr0'), 'm', { label: 'Zone am Anfang' })}
-      ${stepper('zr1', Math.min(setv('zr1'), setv('zr0')), 'm', { label: 'Zone am Ende' })}
-      ${stepper('zshrink', Math.min(setv('zshrink'), st.dur), 'min', { label: 'Schrumpft über' })}
-      ${stepper('zgrace', setv('zgrace'), 's', { label: 'Außerhalb bis gefangen' })}` : ''}
-      <div class="set"><div>Spielfeld</div>${host
-        ? `<button class="btn sm" data-act="draw">${st.area.length >= 3 ? st.area.length + ' Ecken · ändern' : 'Zeichnen'}</button>`
-        : `<b style="font-family:var(--display)">${st.area.length >= 3 ? st.area.length + ' Ecken' : 'Keins'}</b>`}</div></div></div>`;
-    if (host) h += `<button class="btn pri wide keep" data-act="start" ${canStart ? '' : 'disabled'}>Spiel starten</button>
-      ${canStart ? '' : '<div class="note">Mindestens ein Runner und ein Jäger nötig.</div>'}`;
-    else h += `<div class="note keep">Warte, bis der Host das Spiel startet. Deine Rolle: <b>${baseRole(me.id) === 'runner' ? 'Runner' : 'Jäger'}</b></div>`;
-    h += `<button class="btn ghost wide" data-act="leave">Raum verlassen</button>`;
-  } else if (ph === 'head' || ph === 'hunt') {
-    const my = role(me.id);
-    const left = runnersLeft();
-    h += `<div class="sec keep"><div class="h"><span>${ph === 'head' ? 'Vorsprung läuft' : 'Jagd läuft'}</span><span>${left.length} von ${origRunners().length} Runnern frei</span></div>${zoneLine()}</div>`;
-    const runners = ps.filter(p => role(p.id) === 'runner');
-    const hunters = ps.filter(p => role(p.id) === 'hunter');
-    if (my === 'hunter') {
-      h += `<div class="sec keep"><div class="h">Runner</div><div class="list">${runners.map(p => {
-        const s = ph === 'hunt' ? sighting(p) : null;
-        const d = s && S.pos ? haversine(S.pos, s) : null;
-        const sub = ph === 'head' ? 'Versteckt sich …' : s ? fmtDist(d) + (d != null ? ' · ' : '') + 'Ping ' + ago(s.t) : 'Noch kein Ping';
-        const cf = S.confirm === 'catch:' + p.id;
-        return plRow(p, { sub, right: ph === 'hunt' ? `<button class="btn ${cf ? 'red' : ''} sm" data-act="${cf ? 'catchGo' : 'catch'}" data-id="${esc(p.id)}">${cf ? 'Senden' : 'Gefangen'}</button>` : '' });
-      }).join('') || '<div class="note">Keine Runner mehr.</div>'}</div></div>`;
-      h += `<div class="sec"><div class="h">Jäger-Team</div><div class="list">${hunters.map(p => plRow(p, {
-        sub: p.id === me.id ? 'Du' : (now() - p.u > STALE_MS ? 'Kein Signal ' + ago(p.u) : S.pos && p.lat != null ? fmtDist(haversine(S.pos, p)) + ' entfernt' : 'Online')
-      })).join('')}</div></div>`;
-    } else {
-      h += `<div class="sec keep"><div class="note">Die Jäger sehen deinen Standort nur beim Ping. Bleib im Spielfeld und lass den Bildschirm an.</div></div>`;
-      if (runners.length > 1) h += `<div class="sec"><div class="h">Dein Team</div><div class="list">${runners.map(p => plRow(p, {
-        sub: p.id === me.id ? 'Du' : S.pos && p.lat != null ? fmtDist(haversine(S.pos, p)) + ' entfernt' : 'Online'
-      })).join('')}</div></div>`;
-      h += S.confirm === 'caught'
-        ? `<div class="confirm"><div>Wirklich gefangen? Du wirst dann Jäger.</div><div class="row"><button class="btn red" style="flex:1" data-act="caughtGo">Ja, gefangen</button><button class="btn" data-act="cancel">Nein</button></div></div>`
-        : `<button class="btn wide" data-act="caught">Ich wurde gefangen</button>`;
-    }
-    if (host) h += S.confirm === 'end'
-      ? `<div class="confirm"><div>Spiel für alle beenden?</div><div class="row"><button class="btn red" style="flex:1" data-act="endGo">Beenden</button><button class="btn" data-act="cancel">Abbrechen</button></div></div>`
-      : `<button class="btn ghost wide" data-act="end">Spiel beenden</button>`;
+  // Zone
+  const z = (ph === 'head' || ph === 'hunt') ? zoneNow() : null;
+  if (z) { if (!zoneC) zoneC = L.circle([z.lat, z.lng], { radius: z.r, color: COL.zone, weight: 3, fillOpacity: .04, interactive: false }).addTo(map); else { zoneC.setLatLng([z.lat, z.lng]); zoneC.setRadius(z.r); } }
+  else if (zoneC) { zoneC.remove(); zoneC = null; }
+  const hp = S.cfg ? rec(S.cfg.host) : null;
+  if (ph === 'lobby' && s.zone && !S.drawing && hp && hp.lat != null) {
+    if (!zonePrev) zonePrev = L.circle([hp.lat, hp.lng], { radius: s.r0, color: COL.zone, weight: 2, dashArray: '8 6', fillOpacity: .03, interactive: false }).addTo(map);
+    else { zonePrev.setLatLng([hp.lat, hp.lng]); zonePrev.setRadius(s.r0); }
+  } else if (zonePrev) { zonePrev.remove(); zonePrev = null; }
+  // Spielfeld
+  const area = S.drawing ? S.draft : (s.area || []);
+  const asig = JSON.stringify(area) + S.drawing;
+  if (areaPoly && areaPoly._s !== asig) { areaPoly.remove(); areaPoly = null; }
+  if (areaPoly) {}
+  else if (area.length >= 3) areaPoly = L.polygon(area, { color: COL.zone, weight: 2, dashArray: S.drawing ? '6 6' : null, fillOpacity: .05, interactive: false }).addTo(map);
+  else if (area.length === 2) areaPoly = L.polyline(area, { color: COL.zone, weight: 2, dashArray: '6 6', interactive: false }).addTo(map);
+  if (areaPoly) areaPoly._s = asig;
+  if (S.drawing) area.forEach((p, i) => upsert('v:' + i, p, '<div class="mi"><div class="mv"></div></div>'));
+  // Mitspieler
+  const dist = p => S.pos && p && p.lat != null ? fmtD(hav(S.pos, p)) : '';
+  if (ph === 'lobby' || ph === 'none') {
+    for (const p of lobbyList().on) { if (p.id === me.id || p.lat == null) continue; upsert('p:' + p.id, [p.lat, p.lng], personHtml(p.id, baseRole(p.id) === 'r' ? 'runner' : 'hunter', { lobby: true })); v['pl-' + p.id] = dist(p); }
   } else if (ph === 'ended') {
-    const win = winner(); const t = times();
-    const at = S.cfg.endedAt || t.endAt;
-    h += `<div class="sec keep"><div class="big ${win}">${win === 'hunter' ? 'Jäger gewinnen' : 'Runner gewinnen'}</div>
-      <div class="note">Spielzeit ${mmss(Math.max(0, at - t.headEnd))}</div></div>`;
-    h += `<div class="sec"><div class="h">Runner</div><div class="list">${origRunners().map(p => {
-      const ct = caughtTime(p.id); const caught = ct && ct <= at;
-      const by = caught && (p.id === me.id ? S.caughtBy : p.caughtBy);
-      const byN = by === 'zone' ? 'der Zone' : by ? (by === me.id ? me.name : S.players[by]?.name) : null;
-      return plRow(p, { role: 'runner', out: caught, sub: caught ? 'Gefangen nach ' + mmss(ct - t.headEnd) + (byN ? ' von ' + byN : '') : 'Entkommen', right: `<span class="tag">${caught ? 'Gefangen' : 'Frei'}</span>` });
-    }).join('')}</div></div>`;
-    h += host ? `<button class="btn pri wide keep" data-act="again">Neue Runde</button>` : `<div class="note keep">Der Host kann eine neue Runde starten.</div>`;
-    h += `<button class="btn ghost wide" data-act="leave">Raum verlassen</button>`;
+    for (const id of gameIds()) { const r = rec(id); if (id === me.id || !r || r.lat == null) continue; upsert('p:' + id, [r.lat, r.lng], personHtml(id, baseRole(id) === 'r' ? 'runner' : 'hunter')); v['pl-' + id] = ''; }
+    for (const id of runnerIds()) drawTrail(id, true);
+  } else {
+    for (const id of gameIds()) {
+      if (id === me.id) continue;
+      const r = rec(id), rl = role(id);
+      if (rl === my) {
+        if (!r || r.lat == null) continue;
+        const stl = !fresh(id);
+        upsert('p:' + id, [r.lat, r.lng], personHtml(id, rl, { stale: stl }));
+        v['pl-' + id] = stl ? 'kein Signal' : dist(r);
+      } else if (my === 'hunter' && rl === 'runner' && ph === 'hunt') {
+        const sg = sighting(id); if (!sg) continue;
+        const lost = !fresh(id), isNew = now() < S.newUntil;
+        upsert('s:' + id, [sg.lat, sg.lng], `<div class="mi"><div class="mping${lost ? ' lost' : ''}"><b></b></div><span class="lb${isNew && !lost ? ' new' : ''}">${esc(nameOf(id))} <i data-b="sa-${id}"${lost ? ' class="bad"' : ''}></i></span></div>`, 500);
+        v['sa-' + id] = lost ? 'kein Signal' : age(now() - sg.t);
+        drawTrail(id, false);
+      }
+    }
+    if (my === 'runner' && ph === 'hunt' && S.ping && S.ping.s === S.cfg.startAt) {
+      upsert('mine', [S.ping.lat, S.ping.lng], `<div class="mi"><div class="mping mine"><b></b></div><span class="lb">Das sehen die Jäger <i data-b="mine"></i></span></div>`, 400);
+      v.mine = age(now() - S.ping.t);
+    }
+    if (my === 'hunter' && ph === 'hunt' && S.pos) {
+      targets(); const sg = S.target ? sighting(S.target) : null;
+      if (sg) line('tl', [[S.pos.lat, S.pos.lng], [sg.lat, sg.lng]], { color: '#ffffff', weight: 2, dashArray: '2 7', opacity: .85, lineCap: 'round' });
+    }
+    if (my === 'runner' && ph !== 'ended' && S.pos) {
+      const zs = zoneState(S.pos);
+      if (zs && zs.out && zs.z) { const d = hav(S.pos, zs.z), f = (d - zs.z.r) / d; line('back', [[S.pos.lat, S.pos.lng], [S.pos.lat + (zs.z.lat - S.pos.lat) * f, S.pos.lng + (zs.z.lng - S.pos.lng) * f]], { color: '#ffffff', weight: 3, dashArray: '2 7', lineCap: 'round' }); }
+    }
   }
-  if (S.confirm === 'leave') h = h.replace('<button class="btn ghost wide" data-act="leave">Raum verlassen</button>',
-    `<div class="confirm"><div>Raum wirklich verlassen?</div><div class="row"><button class="btn red" style="flex:1" data-act="leaveGo">Verlassen</button><button class="btn" data-act="cancel">Bleiben</button></div></div>`);
-  if (h !== S.lastSheet) { $('#sheetBody').innerHTML = h; S.lastSheet = h; }
-  $('#sheet').classList.toggle('min', S.sheetMin);
-  document.documentElement.style.setProperty('--sheet-h', $('#sheet').offsetHeight + 'px');
+  sweep();
+  fill($('#map'), v);
+  // Namensschilder am rechten Rand nach links klappen
+  const W = innerWidth;
+  for (const [k, m] of MK) { if (k === 'me') continue; const el = m.getElement()?.firstElementChild; if (!el) continue; const x = map.latLngToContainerPoint(m.getLatLng()).x; el.classList.toggle('l', x > W - 160); }
+  if (ph === 'ended' && S.endFitted !== S.cfg.startAt) {
+    S.endFitted = S.cfg.startAt;
+    const lls = []; for (const id of runnerIds()) (S.trail[id] || []).forEach(p => lls.push([p.lat, p.lng]));
+    if (S.pos) lls.push([S.pos.lat, S.pos.lng]);
+    if (lls.length > 1) setTimeout(() => fitLL(lls), 400);
+  }
+}
+function drawTrail(id, all) {
+  const tr = S.trail[id] || []; if (!tr.length) return;
+  const lls = tr.map(p => [p.lat, p.lng]);
+  if (lls.length > 1) line('tr:' + id, lls, { color: COL.runner, weight: all ? 3 : 2, dashArray: '3 7', opacity: .75 });
+  tr.slice(0, all ? tr.length : -1).forEach(p => upsert(`to:${id}:${p.i}`, [p.lat, p.lng], '<div class="mi"><div class="mping old"><b></b></div></div>'));
+}
+// Randmarken
+const EDG = new Map();
+function renderEdges() {
+  const box = $('#edges'), ph = phase();
+  const show = S.T && !S.pocket && ph === 'hunt' && myRole() === 'hunter';
+  const seen = new Set();
+  if (show) {
+    const W = innerWidth, H = innerHeight, top = topH() + 8, bot = H - sheetH() - 8;
+    for (const id of targets()) {
+      const sg = sighting(id); if (!sg) continue;
+      const p = map.latLngToContainerPoint([sg.lat, sg.lng]);
+      if (p.x >= 12 && p.x <= W - 70 && p.y >= top && p.y <= bot) continue;
+      seen.add(id);
+      let el = EDG.get(id);
+      if (!el) { el = document.createElement('button'); el.className = 'edge'; el.dataset.act = 'target'; el.dataset.id = id; el.innerHTML = `<span class="ea">${arw()}</span><span class="t"></span>`; box.appendChild(el); EDG.set(id, el); }
+      const x = Math.max(86, Math.min(W - 136, p.x)), y = Math.max(top + 14, Math.min(bot - 14, p.y));
+      el.style.left = x + 'px'; el.style.top = y + 'px';
+      const b = S.pos ? brg(S.pos, sg) : 0;
+      el.querySelector('svg').style.transform = `rotate(${Math.round(b)}deg)`;
+      setT(el.querySelector('.t'), `${nameOf(id)} ${S.pos ? fmtD(hav(S.pos, sg)) : ''}${fresh(id) ? '' : ' · kein Signal'}`);
+    }
+  }
+  for (const [id, el] of EDG) if (!seen.has(id)) { el.remove(); EDG.delete(id); }
 }
 
-function zoneLine() {
-  const z = zoneNow(); if (!z) return '';
-  const r = Math.round(z.r / 5) * 5;
-  const txt = z.f >= 1 ? 'Zone: ' + r + ' m, kleinste Größe erreicht'
-    : 'Zone: ' + r + ' m, schrumpft auf ' + z.r1 + ' m' + (now() < times().headEnd ? ' ab Jagdbeginn' : '');
-  return `<div class="note" data-zone>${txt}</div>`;
+// ================= Oberfläche =================
+function renderHud() {
+  const ph = phase(), my = inGame() ? myRole() : null, t = times();
+  document.documentElement.style.setProperty('--role', my === 'runner' ? 'var(--runner)' : my === 'hunter' ? 'var(--hunter)' : 'var(--zone)');
+  const pill = $('#rolePill'), pc = my ? (my === 'runner' ? 'pill runner' : 'pill') : 'pill lobby';
+  if (pill.className !== pc) pill.className = pc;
+  setT(pill, my === 'runner' ? 'Runner' : my === 'hunter' ? 'Jäger' : 'Lobby');
+  const hero = $('#hero'); let hc = 'hero', lbl = '', val = '', bar = null, sl = '', sv = '';
+  if (ph === 'lobby' || ph === 'none') { hc = 'hero code'; lbl = 'Raum'; val = S.code || ''; sl = 'SPIELER'; sv = String(lobbyList().on.length); }
+  else if (ph === 'head') { lbl = my === 'runner' ? 'Vorsprung' : 'Jagd in'; val = mmss(t.headEnd - now()); bar = (t.headEnd - now()) / Math.max(1, t.headEnd - t.start); sl = 'REST'; sv = mmss(t.endAt - now()); }
+  else if (ph === 'hunt') {
+    const pl = pingLeft(); lbl = 'Ping in'; val = pl == null ? '—' : mmss(pl); bar = pl == null ? 0 : pl / t.iv; sl = 'REST'; sv = mmss(t.endAt - now());
+    if (my === 'runner' && pl != null && pl <= 10000) hc = 'hero warn';
+  } else if (ph === 'ended') { lbl = 'Runde ' + (S.cfg.round || 1); val = 'ENDE'; }
+  if (hero.className !== hc) hero.className = hc;
+  setT($('#heroLbl'), lbl); setT($('#heroVal'), val); setT($('#sideLbl'), sl); setT($('#sideVal'), sv);
+  $('#heroBarW').hidden = bar == null;
+  if (bar != null) $('#heroBar').style.width = (Math.max(0, Math.min(1, bar)) * 100).toFixed(1) + '%';
+  // Status nur bei Problemen
+  const pips = [];
+  if (S.clients.length && !netOk()) pips.push(['bad', 'Offline']);
+  if (S.geoErr) pips.push(['bad', 'Kein Standort']);
+  else if (!S.pos) pips.push(['', 'GPS sucht …']);
+  else if (S.pos.acc > 40) pips.push(['', 'GPS ungenau']);
+  if (inGame() && ph !== 'ended' && wakeTried && !WL) pips.push(['', 'Bildschirm-Sperre?']);
+  patch($('#pips'), pips.map(([c, x]) => `<span class="pip ${c}">${x}</span>`).join(''));
+  // Eine Warnung
+  let al = '', v = {};
+  const zs = (ph === 'head' || ph === 'hunt') ? zoneState(S.pos) : null;
+  if (zs && zs.out && my === 'runner' && S.outSince) {
+    const left = graceMs() - (now() - S.outSince);
+    al = `<div class="alert bad"><div class="ring"><svg viewBox="0 0 44 44"><circle cx="22" cy="22" r="19" fill="none" stroke="rgba(255,255,255,.2)" stroke-width="4"/><circle cx="22" cy="22" r="19" fill="none" stroke="#fff" stroke-width="4" stroke-dasharray="119.4" data-o="ring"/></svg><span data-b="oc"></span></div><div>Außerhalb der Zone<small data-b="om"></small></div><div class="arwbox">${arw('oa')}</div></div>`;
+    v = { oc: String(Math.max(0, Math.ceil(left / 1000))), om: zs.back ? `${r10(zs.back.d)} m zurück, Richtung ${dn(zs.back.b)}` : 'Zurück ins Spielfeld', oa: zs.back ? rel(zs.back.b) : 0, ring: (119.4 * (1 - Math.max(0, left) / graceMs())).toFixed(1) };
+  } else if (S.near && my === 'runner') {
+    al = `<div class="alert bad">${IC.heart}<div>Jäger in der Nähe<small>unter 100 m, Richtung unbekannt</small></div><span></span></div>`;
+  } else if (S.geoErr) {
+    al = `<div class="alert bad">${IC.warn}<div>${esc(S.geoErr)}</div><span></span></div>`;
+  } else if (zs && zs.out && my === 'hunter') {
+    al = `<div class="alert warn">${IC.warn}<div>Außerhalb der Zone<small>Für Jäger ohne Folgen</small></div><span></span></div>`;
+  }
+  patch($('#alert'), al); fill($('#alert'), v);
+  const vig = $('#vig'), vigOn = my === 'runner' && ph !== 'ended' && !!((zs && zs.out && S.outSince) || S.near);
+  vig.hidden = !vigOn; vig.classList.toggle('beat', !!S.near && !(zs && zs.out));
+  const th = topH(); if (S._th !== th) { S._th = th; document.documentElement.style.setProperty('--top-h', th + 'px'); }
 }
-function render() { renderHud(); renderSheet(); renderMap(); }
 
-// Klicks im Panel
-$('#sheetBody').addEventListener('click', e => {
+// ---------- Panel ----------
+function sheetPx(stt) {
+  const H = innerHeight;
+  if (stt === 'peek') return 172;
+  if (stt === 'half') return Math.round(H * 0.52);
+  if (stt === 'lobby') return Math.round(H * 0.66);
+  if (stt === 'draw') return 230;
+  return Math.max(300, H - topH() - 8);
+}
+function curSheet() {
+  const ph = phase();
+  if (S.drawing) return 'draw';
+  if (ph === 'lobby' || ph === 'none') return S.lobbyMin ? 'peek' : 'lobby';
+  return S.sheet;
+}
+function applySheet() {
+  const s = curSheet(), el = $('#sheet'), h = sheetPx(s);
+  const cls = s === 'lobby' || s === 'draw' ? s : s;
+  if (el.className !== cls) { el.className = cls; if (s === 'peek') $('#sb').scrollTop = 0; }
+  if (el.style.height !== h + 'px') {
+    el.style.height = h + 'px';
+    document.documentElement.style.setProperty('--sheet-h', h + 'px');
+    if (S.follow && S.pos) setTimeout(followTick, 320);
+  }
+}
+function setSheet(s) { S.sheet = s; applySheet(); }
+const toggleRow = (act, on, title, sub) => `<button class="tgl${on ? ' on' : ''}" data-act="${act}"><span>${title}${sub ? `<small>${sub}</small>` : ''}</span><i></i></button>`;
+function settingsBlock(isRunner) {
+  return `<div class="h">Einstellungen</div><div class="list">
+    ${toggleRow('snd', S.sound, 'Ton', 'Pings, Zone, Fang')}
+    ${toggleRow('voice', S.voice, 'Sprachansagen', '„Ping. Lena, 300 Meter, Nordost.“')}
+    ${isRunner ? toggleRow('nears', S.nearSound, 'Herzschlag bei Nähe', 'Leiser Ton, wenn ein Jäger unter 100 m ist. Kann dich verraten.') : ''}
+    <button class="btn" data-act="pocket">Taschenmodus</button></div>`;
+}
+function logBlock() {
+  if (!S.log.length) return '';
+  return `<div class="h">Verlauf</div><div class="log">${S.log.slice(0, 10).map(e => `<div><span>${hhmm(e.t)}</span><span>${esc(e.txt)}</span></div>`).join('')}</div>`;
+}
+function hostBlock() {
+  if (!isHost()) return '';
+  const fr = freeRunners();
+  let h = `<div class="h">Host</div><div class="list">`;
+  for (const id of fr) {
+    const rq = S.creq[id], disputed = rq && rq.ans === 'no', open = rq && !rq.ans && now() - rq.t > 20000, lost = !fresh(id);
+    const sub = lost ? 'Signal weg' : disputed ? `bestreitet Fang von ${esc(rq.fromName)}` : open ? `antwortet nicht (${esc(rq.fromName)})` : 'frei';
+    if (S.confirm === 'hc:' + id) h += `<div class="confirm"><p><b>${esc(nameOf(id))}</b> als gefangen werten?${rq ? ` Der Fang zählt für ${esc(rq.fromName)}.` : ''}</p><div class="btns"><button class="btn red" data-act="hcGo" data-id="${id}">Werten</button><button class="btn" data-act="cancel">Abbrechen</button></div></div>`;
+    else h += `<div class="row"><i class="dot" style="background:${hashCol(id)}"></i><span class="nm">${esc(nameOf(id))}<small class="${lost || disputed || open ? 'bad' : ''}">${sub}</small></span><button class="btn sm" data-act="hc" data-id="${id}">Gefangen werten</button></div>`;
+  }
+  h += `</div>`;
+  h += S.confirm === 'end'
+    ? `<div class="confirm"><p>Spiel für alle abbrechen? Diese Runde zählt dann nicht.</p><div class="btns"><button class="btn red" data-act="endGo">Abbrechen</button><button class="btn" data-act="cancel">Weiterspielen</button></div></div>`
+    : `<button class="btn ghost" data-act="end">Spiel abbrechen</button>`;
+  h += xferBlock();
+  return h;
+}
+function xferBlock() {
+  if (!isHost()) return '';
+  if (S.confirm !== 'xfer') return `<button class="btn ghost" data-act="xfer">Host übergeben</button>`;
+  const others = lobbyList().on.filter(p => p.id !== me.id);
+  return `<div class="confirm" style="border-color:var(--line2);background:var(--p2)"><p>Wer soll Host werden?</p><div class="btns">${others.map(p => `<button class="btn sm" data-act="xferTo" data-id="${p.id}">${esc(p.name)}</button>`).join('') || '<span class="note">Niemand online.</span>'}<button class="btn sm ghost" data-act="cancel">Abbrechen</button></div></div>`;
+}
+function leaveBlock() {
+  return S.confirm === 'leave'
+    ? `<div class="confirm"><p>Raum wirklich verlassen?${isHost() ? ' Ein anderer Spieler wird Host.' : ''}</p><div class="btns"><button class="btn red" data-act="leaveGo">Verlassen</button><button class="btn" data-act="cancel">Bleiben</button></div></div>`
+    : `<button class="btn ghost" data-act="leave">Raum verlassen</button>`;
+}
+function hunterSheet(ph) {
+  const v = {}; let h = '';
+  const ids = targets(), N = runnerIds().length;
+  if (ph === 'head') {
+    h += `<div class="sum" style="min-height:96px;align-items:center"><span><b>Warte am Start</b> · Augen zu</span><span data-b="hd"></span></div>`;
+    v.hd = 'Jagd in ' + mmss(times().headEnd - now());
+  } else {
+    const isNew = now() < S.newUntil;
+    h += `<div class="targets">${ids.map(id => {
+      const lost = !fresh(id), pd = myReq(id);
+      const badge = pd ? '<span class="badge wait">WARTET</span>' : isNew && !lost ? '<span class="badge">NEU</span>' : '';
+      return `<button class="tc${S.target === id ? ' sel' : ''}${lost ? ' lost' : ''}" data-act="target" data-id="${id}">${badge}<span class="arr">${arw('a-' + id)}</span><b>${esc(nameOf(id))}</b><span class="d"><span data-b="d-${id}"></span><small data-b="c-${id}"></small></span><span class="a${lost ? ' bad' : ''}" data-b="s-${id}"></span></button>`;
+    }).join('') || '<div class="note" style="align-self:center">Keine Runner mehr frei.</div>'}</div>`;
+    for (const id of ids) {
+      const sg = sighting(id), lost = !fresh(id), b = sg && S.pos ? brg(S.pos, sg) : null;
+      v['d-' + id] = sg && S.pos ? fmtD(hav(S.pos, sg)) : '–';
+      v['c-' + id] = b != null ? dn(b) : '';
+      v['a-' + id] = b != null ? rel(b) : 0;
+      v['s-' + id] = lost ? 'Signal weg ' + age(now() - (S.players[id]?.u || now())) : sg ? 'Ping vor ' + age(now() - sg.t) : 'noch kein Ping';
+    }
+  }
+  const z = zoneNow();
+  h += `<div class="sum"><span><b data-b="fr"></b> von ${N} Runnern frei</span><span>${z ? 'Zone <b data-b="zr"></b>' : ''}</span></div>`;
+  v.fr = String(freeRunners().length); if (z) v.zr = fmtD(z.r);
+  // Ziel
+  if (ph === 'hunt' && S.target) {
+    const id = S.target, pd = myReq(id), nm = esc(nameOf(id));
+    h += `<div class="h">Ziel</div>`;
+    if (pd && pd.ans === 'no') h += `<div class="wait"><span class="noc">!</span><span>${nm} sagt: nicht gefangen<small>Der Host kann entscheiden.</small></span></div><button class="btn" data-act="resend" data-id="${id}">Erneut fragen</button>`;
+    else if (pd) { h += `<div class="wait"><span class="spin"></span><span>Warte auf ${nm} …<small>seit <span data-b="pw"></span> · die Frage bleibt bestehen</small></span></div><button class="btn" data-act="resend" data-id="${id}">Erneut senden</button>`; v.pw = age(now() - pd.t); }
+    else h += `<button class="btn red big" data-act="catch" data-id="${id}">${nm} gefangen<small>melden</small></button>`;
+  }
+  // Team
+  const team = gameIds().filter(id => id !== me.id && role(id) === 'hunter');
+  if (team.length) {
+    h += `<div class="h">Team</div><div class="list">${team.map(id => `<div class="row"><i class="dot" style="background:${hashCol(id)}"></i><span class="nm">${esc(nameOf(id))}<small data-b="tm-${id}"></small></span><span class="rt" data-b="tc-${id}"></span></div>`).join('')}</div>`;
+    for (const id of team) { const r = rec(id); const ok = r && r.lat != null && S.pos; v['tm-' + id] = !fresh(id) ? 'kein Signal' : ok ? fmtD(hav(S.pos, r)) + ' entfernt' : 'online'; v['tc-' + id] = ok ? dn(brg(S.pos, r)) : ''; }
+  }
+  h += hostBlock() + logBlock() + settingsBlock(false) + leaveBlock();
+  return [h, v];
+}
+function runnerSheet(ph) {
+  const v = {}; let h = '';
+  const zs = zoneState(S.pos), z = zoneNow();
+  let zt;
+  if (!z && !(st().area || []).length) zt = `<div class="tile"><small>Zone</small><b>Keine</b><span>Spiel ohne Zone</span></div>`;
+  else if (zs && zs.out) { zt = `<div class="tile bad"><small>Zone</small><b data-b="zb"></b><span data-b="zs"></span></div>`; v.zb = zs.back ? fmtD(zs.back.d) + ' draußen' : 'draußen'; v.zs = zs.back ? 'zurück nach ' + dl(zs.back.b) : 'zurück ins Spielfeld'; }
+  else { zt = `<div class="tile ok"><small>Zone</small><b data-b="zb"></b><span>${ph === 'head' ? 'schrumpft ab Jagdbeginn' : 'Mitte wandert, Ziel geheim'}</span></div>`; v.zb = zs && zs.edge != null ? 'Rand ' + fmtD(zs.edge) : '–'; }
+  let t2;
+  if (S.near) t2 = `<div class="tile bad"><small>Gefahr</small><b>Jäger nah</b><span>unter 100 m, Richtung unbekannt</span></div>`;
+  else if (ph === 'head') { t2 = `<div class="tile"><small>Jäger</small><b>warten</b><span data-b="hd"></span></div>`; v.hd = 'noch ' + mmss(times().headEnd - now()); }
+  else { t2 = `<div class="tile"><small>Dein Ping</small><b data-b="pt"></b><span>gestrichelt auf der Karte</span></div>`; v.pt = S.ping && S.ping.s === S.cfg.startAt ? 'vor ' + age(now() - S.ping.t) : 'noch keiner'; }
+  h += `<div class="tiles">${zt}${t2}</div>`;
+  const N = runnerIds().length, team = freeRunners().filter(id => id !== me.id);
+  h += `<div class="sum"><span><b data-b="fr"></b> von ${N} Runnern frei</span><span>${team.length ? 'Team: <b data-b="t1"></b>' : 'Allein unterwegs'}</span></div>`;
+  v.fr = String(freeRunners().length);
+  if (team.length) { const id = team[0], r = rec(id); v.t1 = !fresh(id) ? nameOf(id) + ' kein Signal' : r && r.lat != null && S.pos ? `${nameOf(id)} ${fmtD(hav(S.pos, r))}` : nameOf(id); }
+  if (team.length) {
+    h += `<div class="h">Team</div><div class="list">${team.map(id => `<div class="row"><i class="dot" style="background:${hashCol(id)}"></i><span class="nm">${esc(nameOf(id))}<small data-b="tm-${id}"></small></span><span class="rt" data-b="tc-${id}"></span></div>`).join('')}</div>`;
+    for (const id of team) { const r = rec(id), ok = r && r.lat != null && S.pos; v['tm-' + id] = !fresh(id) ? 'kein Signal' : ok ? fmtD(hav(S.pos, r)) + ' entfernt' : 'online'; v['tc-' + id] = ok ? dn(brg(S.pos, r)) : ''; }
+  }
+  if (S.confirm === 'caught') {
+    const hs = gameIds().filter(id => id !== me.id && role(id) === 'hunter');
+    h += `<div class="confirm"><p>Wer hat dich gefangen? Du wirst dann Jäger.</p><div class="btns">${hs.map(id => `<button class="btn sm" data-act="caughtBy" data-id="${id}">${esc(nameOf(id))}</button>`).join('')}<button class="btn sm" data-act="caughtBy" data-id="">Weiß nicht</button></div><button class="btn ghost" data-act="cancel">Doch nicht</button></div>`;
+  } else h += `<button class="btn ghost" data-act="caught">Ich wurde gefangen</button>`;
+  h += hostBlock() + logBlock() + settingsBlock(true) + leaveBlock();
+  return [h, v];
+}
+function scoreTable() {
+  const sc = S.cfg.scores || {}, rp = S.cfg.roundPts || {};
+  const ids = Object.keys(sc).sort((a, b) => sc[b] - sc[a]);
+  if (!ids.length) return '';
+  return `<div class="h"><span>Punkte über den Abend</span><span>nach Runde ${S.cfg.round || 1}</span></div><table class="score">${ids.map((id, i) => `<tr class="${id === me.id ? 'me' : ''}"><td>${i + 1}. ${esc(nameOf(id))}${id === me.id ? ' (du)' : ''}</td><td class="p">${rp[id] ? '+' + rp[id] : ''}</td><td class="n">${sc[id]}</td></tr>`).join('')}</table>`;
+}
+function endSheet() {
+  const c = S.cfg, t = times(), ty = endType();
+  const endAt = c.endedAt || Math.min(now(), t.endAt);
+  const fr = freeRunners(endAt).length, N = runnerIds().length;
+  let h = '';
+  const wc = ty === 'abort' ? '' : ty === 'all' ? 'var(--hunter)' : 'var(--runner)';
+  h += `<div class="win${ty === 'abort' ? ' abort' : ty === 'time' ? ' runner' : ''}" style="${wc ? '--wc:' + wc : ''}"><small>RUNDE ${c.round || 1} · ERGEBNIS</small><b>${ty === 'abort' ? 'Abgebrochen' : ty === 'all' ? 'Jäger gewinnen' : 'Runner gewinnen'}</b><span>${ty === 'abort' ? 'Diese Runde zählt nicht.' : ty === 'all' ? `Alle gefangen, ${mmss(t.endAt - endAt)} vor Schluss` : `${fr} von ${N} Runnern entkommen`}</span></div>`;
+  const total = Math.max(1, endAt - t.headEnd);
+  h += `<div class="h">Überlebt</div><div class="surv">${runnerIds().map(id => {
+    const ci = caughtInfo(id), caught = ci && ci.t <= endAt, until = caught ? ci.t : endAt, sv = Math.max(0, until - t.headEnd);
+    const by = caught ? (ci.by === 'zone' ? 'Zone' : ci.by ? nameOf(ci.by) : 'gefangen') : 'frei';
+    return `<div><span>${esc(nameOf(id))}</span><i><u style="width:${(sv / total * 100).toFixed(1)}%"></u></i><em>${mmss(sv)} · ${esc(by)}</em></div>`;
+  }).join('')}</div>`;
+  const cnt = {}; for (const id of runnerIds()) { const ci = caughtInfo(id); if (ci && ci.t <= endAt && ci.by && ci.by !== 'zone') cnt[ci.by] = (cnt[ci.by] || 0) + 1; }
+  const cs = Object.entries(cnt).sort((a, b) => b[1] - a[1]);
+  if (cs.length) h += `<div class="sum"><span>Fänge: ${cs.map(([id, n]) => `<b>${esc(nameOf(id))} ${n}</b>`).join(' · ')}</span></div>`;
+  h += scoreTable();
+  h += isHost() ? `<button class="btn pri big" data-act="again">Neue Runde<small>Rollen werden fair ausgelost</small></button>` : `<div class="note">Der Host (${esc(nameOf(c.host))}) startet die nächste Runde.</div>`;
+  h += xferBlock() + logBlock() + leaveBlock();
+  return [h, {}];
+}
+const isReady = p => !!(p.rd && p.rd.g && p.rd.s && p.rd.w);
+function missing(p) {
+  const r = p.rd || {}, m = [];
+  if (!r.g) m.push('kein GPS'); if (!r.s) m.push('Ton nicht getestet'); if (!r.w) m.push('Bildschirm-Sperre?');
+  return m;
+}
+function rulesSum(s) {
+  return `${s.dur} min Jagd · Ping alle ${s.ping} min · ${s.head} min Vorsprung · ` + (s.zone ? `Zone ${s.r0} → ${Math.min(s.r1, s.r0)} m, Endpunkt zufällig · ${s.grace} s draußen = gefangen` : 'ohne Zone') + ((s.area || []).length >= 3 ? ' · Spielfeld gezeichnet' : '');
+}
+function stepper(k, val, unit, label) {
+  return `<div class="set"><div>${label}</div><div class="step"><button class="stp" data-act="dec" data-k="${k}" aria-label="weniger">−</button><b>${val} ${unit}</b><button class="stp" data-act="inc" data-k="${k}" aria-label="mehr">+</button></div></div>`;
+}
+function lobbySheet() {
+  const host = isHost(), s = st(), L = lobbyList(), v = {};
+  let h = `<div class="code"><div><small>RAUM-CODE</small><b>${esc(S.code)}</b></div><button class="sq" data-act="qr" aria-label="QR-Code zeigen">${IC.qr}</button><button class="sq" data-act="share" aria-label="Einladen">${IC.share}</button></div>`;
+  const rdyN = L.on.filter(isReady).length;
+  h += `<div class="ready"><div class="h"><span>Bereit</span><span>${rdyN} von ${L.on.length}</span></div><div class="bars">${L.on.map(p => `<i class="${isReady(p) ? 'on' : 'part'}"></i>`).join('')}</div></div>`;
+  if (!host) {
+    const r = baseRole(me.id) === 'r';
+    h += `<div class="yourrole${r ? ' runner' : ''}" style="background:${r ? 'var(--runner)' : 'var(--hunter)'}"><small>DEINE ROLLE</small><b>${r ? 'Runner' : 'Jäger'}</b><span>${esc(nameOf(S.cfg.host))} ist Host und startet</span></div>`;
+  }
+  const ico = (ok, svg) => `<i class="${ok ? '' : 'no'}">${svg}</i>`;
+  h += `<div class="h"><span>Spieler · ${L.on.length}</span>${host ? '<span>Tippen = Rolle</span>' : ''}</div><div class="list">${L.on.map(p => {
+    const r = baseRole(p.id), ms = missing(p), you = p.id === me.id;
+    const sub = (you ? 'Du' + (host ? ' · Host' : '') : p.id === S.cfg.host ? 'Host' : '') + (ms.length ? (you || p.id === S.cfg.host ? ' · ' : '') + ms.join(' · ') : (you || p.id === S.cfg.host ? '' : 'bereit'));
+    const chip = host ? `<button class="rt ${r}" data-act="role" data-id="${p.id}">${r === 'r' ? 'Runner' : 'Jäger'}</button>` : `<span class="rt ${r}">${r === 'r' ? 'Runner' : 'Jäger'}</span>`;
+    return `<div class="pl"><span class="av" style="background:${hashCol(p.id)}">${esc(ini(p.name))}</span><span class="nm">${esc(p.name)}<small class="${ms.length ? 'w' : ''}">${esc(sub)}</small></span><span class="ics">${ico(p.rd?.g, IC.pin)}${ico(p.rd?.s, IC.snd)}${ico(p.rd?.w, IC.scr)}</span>${chip}</div>`;
+  }).join('')}
+  ${L.off.map(p => `<div class="pl off"><span class="av" style="background:${hashCol(p.id)}">${esc(ini(p.name))}</span><span class="nm">${esc(p.name)}<small>offline seit <span data-b="off-${p.id}"></span> · spielt nicht mit</small></span><span></span>${host ? `<button class="rm" data-act="kick" data-id="${p.id}">Entfernen</button>` : '<span></span>'}</div>`).join('')}</div>`;
+  L.off.forEach(p => v['off-' + p.id] = age(now() - p.u));
+  if (host) {
+    const max = Math.max(1, L.on.length - 1), n = Math.min(S.randN || Math.max(1, Object.values(S.cfg.roles || {}).filter(x => x === 'r').length) || 1, max);
+    S.randN = n;
+    h += `<div class="draw"><button class="stp" data-act="rdec" ${n <= 1 ? 'disabled' : ''} aria-label="weniger Runner">−</button><span class="n">${n} Runner</span><button class="stp" data-act="rinc" ${n >= max ? 'disabled' : ''} aria-label="mehr Runner">+</button><button class="btn sm" data-act="rand">Auslosen</button></div>
+      <div class="note">Beim Auslosen kommt zuerst dran, wer seltener Runner war.</div>`;
+  }
+  // Dein Handy
+  const me_ = myRecord().rd;
+  h += `<div class="h">Dein Handy</div><div class="checks">
+    <div class="ck"><span class="st ${me_.g ? '' : 'no'}">${me_.g ? '✓' : '!'}</span><b>Standort<small data-b="ckg"></small></b><span></span></div>
+    ${S.tonAsk ? `<div class="ck"><span class="st no">?</span><b>Hast du den Ton gehört?<small>Wenn nicht: Stummschalter aus, lauter stellen</small></b><span class="btns" style="flex-wrap:nowrap"><button class="btn sm" data-act="tonYes">Ja</button><button class="btn sm" data-act="tonNo">Nein</button></span></div>`
+      : `<button class="ck" data-act="ton"><span class="st ${me_.s ? '' : 'no'}">${me_.s ? '✓' : '!'}</span><b>Ton<small>${me_.s ? 'getestet, nochmal antippen zum Hören' : 'Antippen zum Testen'}</small></b><span class="go">${me_.s ? '' : 'Testen'}</span></button>`}
+    <div class="ck"><span class="st ${me_.w ? '' : 'no'}">${me_.w ? '✓' : '!'}</span><b>Bildschirm bleibt an<small>${me_.w ? 'solange die Seite offen ist' : 'Auto-Sperre auf „Nie“ stellen'}</small></b><span></span></div></div>`;
+  v.ckg = S.geoErr ? 'blockiert' : S.pos ? 'genau auf ' + S.pos.acc + ' m' : 'wird gesucht …';
+  // Regeln
+  h += `<div class="h">Regeln</div>`;
+  if (host) {
+    h += `<div class="presets">${Object.entries(PRESETS).map(([k, p]) => `<button class="${s.preset === k ? 'on' : ''}" data-act="preset" data-v="${k}"><b>${p.n}</b><small>${p.dur} min</small></button>`).join('')}</div>`;
+  }
+  h += `<div class="rsum">${esc(rulesSum(s))}</div>`;
+  if (host) {
+    h += `<button class="more" data-act="more">${S.more ? 'Weniger ‹' : 'Erweitert: Werte einzeln, Spielfeld ›'}</button>`;
+    if (S.more) h += `<div>${stepper('ping', s.ping, 'min', 'Ping alle')}${stepper('head', s.head, 'min', 'Vorsprung')}${stepper('dur', s.dur, 'min', 'Spieldauer')}
+      <div class="set"><div>Schrumpfzone</div><button class="btn sm" data-act="ztog">${s.zone ? 'An' : 'Aus'}</button></div>
+      ${s.zone ? stepper('r0', s.r0, 'm', 'Zone am Anfang') + stepper('r1', Math.min(s.r1, s.r0), 'm', 'Zone am Ende') + stepper('shrink', s.shrink, '%', 'Schrumpft über (der Spielzeit)') + stepper('grace', s.grace, 's', 'Draußen bis gefangen') : ''}
+      <div class="set"><div>Spielfeld</div><button class="btn sm" data-act="draw">${(s.area || []).length >= 3 ? s.area.length + ' Ecken · ändern' : 'Zeichnen'}</button></div></div>`;
+    h += xferBlock();
+  }
+  h += scoreTable() + leaveBlock();
+  return [h, v];
+}
+function drawSheet() {
+  return [`<div class="h"><span>Spielfeld zeichnen</span><span>${S.draft.length} Ecken</span></div>
+    <div class="note">Tippe auf die Karte, um Ecken zu setzen. Oder geh zur Ecke und tippe „Mein Standort“.</div>
+    <div class="btns"><button class="btn sm" data-act="vHere">Mein Standort</button><button class="btn sm" data-act="vUndo" ${S.draft.length ? '' : 'disabled'}>Rückgängig</button><button class="btn sm" data-act="vClear" ${S.draft.length ? '' : 'disabled'}>Löschen</button></div>
+    <div class="btns"><button class="btn pri" data-act="vDone" ${S.draft.length === 0 || S.draft.length >= 3 ? '' : 'disabled'}>Fertig</button><button class="btn ghost" data-act="vCancel">Abbrechen</button></div>`, {}];
+}
+function renderSheet() {
+  const ph = phase();
+  let b;
+  if (ph === 'none') b = [`<div class="note">Verbinde mit Raum <b>${esc(S.code)}</b> …</div><button class="btn ghost" data-act="leaveGo">Zurück</button>`, {}];
+  else if (S.drawing) b = drawSheet();
+  else if (ph === 'lobby') b = lobbySheet();
+  else if (ph === 'ended') b = endSheet();
+  else b = myRole() === 'hunter' ? hunterSheet(ph) : runnerSheet(ph);
+  const mode = ph + ':' + (inGame() ? myRole() : '') + ':' + S.drawing;
+  if (S._mode !== mode) { S._mode = mode; $('#sb').scrollTop = 0; }
+  patch($('#sb'), b[0]); fill($('#sb'), b[1]);
+  applySheet();
+  // Startleiste in der Lobby
+  const sb = $('#startbar'), showSB = ph === 'lobby' && !S.drawing && !S.lobbyMin;
+  sb.hidden = !showSB;
+  if (showSB) {
+    const L = lobbyList(), nR = L.on.filter(p => baseRole(p.id) === 'r').length, nH = L.on.length - nR, ok = nR >= 1 && nH >= 1;
+    const notReady = L.on.filter(p => !isReady(p)).map(p => p.name);
+    if (isHost()) {
+      patch(sb, `<button class="btn pri big" data-act="start" ${ok ? '' : 'disabled'}>Starten<small data-b="sbs"></small></button>`);
+      fill(sb, { sbs: !ok ? 'Mindestens ein Runner und ein Jäger nötig' : `${L.on.length - notReady.length} von ${L.on.length} bereit` + (notReady.length ? ` · ${notReady.slice(0, 3).join(', ')} prüfen` : '') });
+    } else patch(sb, `<div class="btn" style="opacity:.85">Warte auf ${esc(nameOf(S.cfg.host))} …</div>`);
+  }
+}
+// ---------- Taschenmodus ----------
+function renderPocket() {
+  const el = $('#pocket'), ph = phase();
+  const show = S.pocket && (ph === 'head' || ph === 'hunt');
+  el.hidden = !show; if (!show) return;
+  const my = myRole(), H = my === 'hunter', t = times(), v = {};
+  const pl = pingLeft();
+  let h = `<div class="top"><div class="pill${H ? '' : ' runner'}">${H ? 'Jäger' : 'Runner'}</div><span>REST <b data-b="pr"></b></span></div>`;
+  v.pr = mmss(t.endAt - now());
+  const warn = !H && ph === 'hunt' && pl != null && pl <= 10000;
+  h += `<div class="big${warn ? ' warn' : ''}"><small>${ph === 'head' ? (H ? 'JAGD IN' : 'VORSPRUNG') : 'PING IN'}</small><b data-b="pb"></b></div>`;
+  v.pb = ph === 'head' ? mmss(t.headEnd - now()) : pl == null ? '—' : mmss(pl);
+  if (H && ph === 'hunt') {
+    const ids = targets(), id = S.target;
+    if (id) {
+      const sg = sighting(id), lost = !fresh(id), b = sg && S.pos ? brg(S.pos, sg) : null;
+      h += `<div class="tg2">${arw('pa')}<b>${esc(nameOf(id).toUpperCase())}</b><span data-b="pd"></span></div>`;
+      v.pa = b != null ? rel(b) : 0;
+      v.pd = sg && S.pos ? `${fmtD(hav(S.pos, sg))} · ${dl(b)}` + (lost ? ' · kein Signal' : ` · vor ${age(now() - sg.t)}`) : 'noch kein Ping';
+      const o = ids.find(x => x !== id);
+      if (o) { const s2 = sighting(o); h += `<div class="sec2"><span>${esc(nameOf(o))}</span><b data-b="po" class="${fresh(o) ? '' : 'bad'}"></b></div>`; v.po = !fresh(o) ? 'kein Signal' : s2 && S.pos ? `${fmtD(hav(S.pos, s2))} ${dn(brg(S.pos, s2))}` : '–'; }
+    } else h += `<div class="zb"><b>KEINE</b><span>Alle Runner gefangen</span></div>`;
+    h += `<div class="bot"><button class="btn" data-act="map">Karte</button><button class="btn red" data-act="pocketCatch">Gefangen</button></div>`;
+  } else if (H) {
+    h += `<div class="zb"><b>WARTEN</b><span>Augen zu, am Start bleiben</span></div><div class="bot"><button class="btn" data-act="map">Karte</button><button class="btn" data-act="snd">${S.sound ? 'Ton an' : 'Ton aus'}</button></div>`;
+  } else {
+    const zs = zoneState(S.pos);
+    if (zs && zs.out) { h += `<div class="zb"><b class="bad" data-b="zb"></b><span data-b="zsub"></span></div>`; v.zb = 'ZURÜCK ' + (zs.back ? fmtD(zs.back.d) : ''); v.zsub = (zs.back ? 'Richtung ' + dl(zs.back.b) + ' · ' : '') + Math.max(0, Math.ceil((graceMs() - (now() - (S.outSince || now()))) / 1000)) + ' s'; }
+    else if (S.near) h += `<div class="zb"><b class="bad">JÄGER NAH</b><span>unter 100 m · leise bleiben</span></div>`;
+    else { h += `<div class="zb"><b>ZONE OK</b><span data-b="zsub"></span></div>`; v.zsub = zs && zs.edge != null ? 'Rand ' + fmtD(zs.edge) : 'keine Zone'; }
+    const team = freeRunners().filter(id => id !== me.id);
+    if (team.length) { h += `<div class="sec2"><span>Team: ${esc(nameOf(team[0]))}</span><b data-b="pt" class="${fresh(team[0]) ? '' : 'bad'}"></b></div>`; const r = rec(team[0]); v.pt = !fresh(team[0]) ? 'kein Signal' : r && r.lat != null && S.pos ? fmtD(hav(S.pos, r)) : ''; }
+    h += `<div class="bot"><button class="btn" data-act="map">Karte</button><button class="btn" data-act="snd">${S.sound ? 'Ton an' : 'Ton aus'}</button></div>`;
+  }
+  h += `<div class="hint">${headingOk() ? 'Der Pfeil zeigt in die echte Richtung.' : 'Kein Kompass: Der Pfeil zeigt nach Norden ausgerichtet.'}</div>`;
+  patch(el, h); fill(el, v);
+}
+// ---------- Enthüllung, Banner, Dialog ----------
+function showReveal(kind, sub) {
+  const rv = $('#reveal'), H = myRole() === 'hunter';
+  let h, color = 'var(--hunter)', cls = '';
+  if (kind === 'start') {
+    const t = times(); color = H ? 'var(--hunter)' : 'var(--runner)'; cls = H ? '' : 'runner';
+    h = `<small>Du bist</small><h2>${H ? 'Jäger' : 'Runner'}</h2><p>${H ? 'Augen zu und warten.' : 'Lauf! Versteck dich in der Zone.'}</p>${t.headEnd > now() ? '<div class="cd" data-b="rvcd"></div>' : ''}<div class="hint">${H ? 'Ein Ton sagt dir, wann die Jagd beginnt' : 'Die Jäger warten noch'} · Tippen zum Schließen</div>`;
+    S.revealUntil = Math.max(t.headEnd, now() + 3500);
+  } else if (kind === 'hunt') {
+    h = `<small>Los</small><h2>Jagd!</h2><p>Der erste Ping ist da.</p><div class="hint">Tippen zum Schließen</div>`; S.revealUntil = now() + 2500;
+  } else {
+    h = `<small>Rollenwechsel</small><h2>Jäger</h2><p>${esc(sub || '')} Du jagst jetzt mit.</p><div class="hint">Tippen zum Schließen</div>`; S.revealUntil = now() + 5000;
+  }
+  rv.className = cls; rv.style.setProperty('--rv', color); rv.innerHTML = h; rv.hidden = false;
+}
+function renderReveal() {
+  const rv = $('#reveal'); if (rv.hidden) return;
+  if (now() > S.revealUntil) { rv.hidden = true; return; }
+  const t = times(); if (t) fill(rv, { rvcd: mmss(t.headEnd - now()) });
+}
+function banner(t, sub, kind, ms) {
+  const b = $('#banner'); b.className = kind || ''; b.innerHTML = `<span>${esc(t)}</span><small>${esc(sub || '')}</small>`; b.hidden = false;
+  clearTimeout(S.bannerT); S.bannerT = setTimeout(() => { b.hidden = true; }, ms || 3500);
+}
+function flash() { const f = document.createElement('div'); f.id = 'flash'; document.body.appendChild(f); setTimeout(() => f.remove(), 1700); }
+function showCatchModal(o) {
+  if (S.modalRid === o.rid && !$('#modal').hidden) return;
+  S.modalRid = o.rid;
+  $('#mbox').innerHTML = `<h3>Gefangen?</h3><p><b>${esc(o.fromName)}</b> meldet: Du bist gefangen. Stimmt das?</p>
+    <button class="btn red big" id="mYes">Ja, gefangen</button><button class="btn" id="mNo">Nein, stimmt nicht</button>
+    <p class="fine">Die Frage bleibt, bis du antwortest. Bei Streit entscheidet ${esc(nameOf(S.cfg.host))} (Host).</p>`;
+  $('#modal').hidden = false;
+  play('warn'); buzz([200, 100, 200]); say(`${o.fromName} meldet: gefangen. Stimmt das?`);
+  $('#mYes').onclick = () => answerCatch(o, true);
+  $('#mNo').onclick = () => answerCatch(o, false);
+}
+function hideModal() { $('#modal').hidden = true; S.modalRid = null; }
+function toast(msg, kind) {
+  const el = document.createElement('div'); el.className = 'toast ' + (kind || ''); el.textContent = msg;
+  $('#toasts').appendChild(el); setTimeout(() => el.remove(), 4500);
+  while ($('#toasts').children.length > 3) $('#toasts').firstChild.remove();
+}
+function showStartErr(m) { const e = $('#startErr'); e.textContent = m; e.hidden = false; }
+function updFab() {
+  $('#bFollow').classList.toggle('on', S.follow);
+  $('#bSound').classList.toggle('off', !S.sound);
+  $('#sndIcon').innerHTML = S.sound ? IC.sndOn : IC.sndOff;
+  const ph = phase(); $('#bPocket').hidden = !(ph === 'head' || ph === 'hunt');
+}
+function render() {
+  if (!S.T) return;
+  try { renderHud(); renderSheet(); renderMap(); renderPocket(); renderEdges(); renderReveal(); updFab(); }
+  catch (e) { console.error(e); }
+}
+function schedule() { if (S.rq) return; S.rq = true; requestAnimationFrame(() => { S.rq = false; render(); }); }
+// Pfeile öfter drehen, wenn ein Kompass da ist
+setInterval(() => {
+  if (!S.T || !headingOk()) return;
+  const v = {};
+  for (const id of freeRunners()) { const sg = sighting(id); if (sg && S.pos) v['a-' + id] = rel(brg(S.pos, sg)); }
+  if (S.target) { const sg = sighting(S.target); if (sg && S.pos) v.pa = rel(brg(S.pos, sg)); }
+  const zs = S.outSince ? zoneState(S.pos) : null; if (zs && zs.back) v.oa = rel(zs.back.b);
+  fill($('#sb'), v); fill($('#pocket'), v); fill($('#alert'), v);
+  const cone = MK.get('me')?.getElement()?.querySelector('.cone'); if (cone) { cone.hidden = false; cone.style.transform = `rotate(${Math.round(S.heading)}deg)`; }
+}, 250);
+
+// ================= Bedienung =================
+document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b || b.disabled) return;
-  const a = b.dataset.act, id = b.dataset.id, st = S.cfg?.settings;
+  const a = b.dataset.act, id = b.dataset.id, s = st();
+  const set = (k, val) => pubCfg({ ...S.cfg, settings: { ...s, [k]: val, preset: k === 'area' || k === 'zone' ? s.preset : 'eigen' } });
   switch (a) {
     case 'share': share(); break;
-    case 'role': toggleRole(id); break;
-    case 'rand': randomRunners(Math.min(S.randN || 1, randMax())); break;
-    case 'rinc': S.randN = Math.min(randMax(), (S.randN || 1) + 1); break;
-    case 'rdec': S.randN = Math.max(1, Math.min(randMax(), (S.randN || 1)) - 1); break;
+    case 'qr': showQr(); break;
+    case 'qrClose': $('#qr').hidden = true; break;
+    case 'kick': pub('/p/' + id, null, true); delete S.players[id]; toast('Entfernt.'); break;
+    case 'role': { const roles = { ...(S.cfg.roles || {}) }; roles[id] = baseRole(id) === 'r' ? 'h' : 'r'; pubCfg({ ...S.cfg, roles }); S.randN = Object.values(roles).filter(x => x === 'r').length || 1; break; }
+    case 'rinc': S.randN = (S.randN || 1) + 1; break;
+    case 'rdec': S.randN = Math.max(1, (S.randN || 1) - 1); break;
+    case 'rand': { const ids = lobbyList().on.map(p => p.id); const n = Math.max(1, Math.min(S.randN || 1, ids.length - 1)); pubCfg({ ...S.cfg, roles: fairDraw(ids, n) }); toast(n === 1 ? '1 Runner ausgelost' : n + ' Runner ausgelost', 'runner'); break; }
+    case 'preset': { const p = PRESETS[b.dataset.v]; pubCfg({ ...S.cfg, settings: { ...s, preset: b.dataset.v, dur: p.dur, ping: p.ping, head: p.head, r0: p.r0, r1: p.r1, grace: p.grace } }); break; }
+    case 'more': S.more = !S.more; break;
     case 'inc': case 'dec': {
-      const k = b.dataset.k, dir = a === 'inc' ? 1 : -1;
-      if (k === 'ping') { const i = Math.max(0, Math.min(PING_OPTS.length - 1, PING_OPTS.indexOf(st.ping) + dir)); setSetting('ping', PING_OPTS[i] ?? 4); }
-      if (k === 'head') setSetting('head', Math.max(0, Math.min(20, st.head + dir)));
-      if (k === 'dur') setSetting('dur', Math.max(10, Math.min(240, st.dur + dir * 10)));
-      if (k === 'zr0') { const v = Math.max(100, Math.min(5000, setv('zr0') + dir * 100)); pubCfg({ ...S.cfg, settings: { ...st, zr0: v, zr1: Math.min(setv('zr1'), v) } }); }
-      if (k === 'zr1') setSetting('zr1', Math.max(25, Math.min(setv('zr0'), Math.min(setv('zr1'), setv('zr0')) + dir * 25)));
-      if (k === 'zshrink') setSetting('zshrink', Math.max(5, Math.min(st.dur, Math.min(setv('zshrink'), st.dur) + dir * 5)));
-      if (k === 'zgrace') setSetting('zgrace', Math.max(15, Math.min(300, setv('zgrace') + dir * 15)));
+      const k = b.dataset.k, d = a === 'inc' ? 1 : -1;
+      if (k === 'ping') { const i = Math.max(0, Math.min(PING_OPTS.length - 1, PING_OPTS.indexOf(s.ping) + d)); set('ping', PING_OPTS[i] ?? 4); }
+      if (k === 'head') set('head', Math.max(0, Math.min(20, s.head + d)));
+      if (k === 'dur') set('dur', Math.max(5, Math.min(240, s.dur + d * 5)));
+      if (k === 'r0') { const v = Math.max(100, Math.min(5000, s.r0 + d * 50)); pubCfg({ ...S.cfg, settings: { ...s, r0: v, r1: Math.min(s.r1, v), preset: 'eigen' } }); }
+      if (k === 'r1') set('r1', Math.max(25, Math.min(s.r0, Math.min(s.r1, s.r0) + d * 25)));
+      if (k === 'shrink') set('shrink', Math.max(30, Math.min(100, s.shrink + d * 10)));
+      if (k === 'grace') set('grace', Math.max(15, Math.min(300, s.grace + d * 15)));
       break;
     }
-    case 'draw': S.drawing = true; S.draft = [...(st.area || [])]; S.sheetMin = false;
-      if (S.draft.length >= 3) map.fitBounds(S.draft, { padding: [40, 40] }); break;
-    case 'vHere': if (S.pos) S.draft.push([+S.pos.lat.toFixed(6), +S.pos.lng.toFixed(6)]); else toast('Noch kein GPS-Signal.', 'hunter'); break;
+    case 'ztog': set('zone', !s.zone); break;
+    case 'draw': S.drawing = true; S.draft = [...(s.area || [])]; S.follow = false; if (S.draft.length >= 3) map.fitBounds(S.draft, { padding: [40, 40] }); break;
+    case 'vHere': if (S.pos) S.draft.push([+S.pos.lat.toFixed(6), +S.pos.lng.toFixed(6)]); else toast('Noch kein GPS-Signal.'); break;
     case 'vUndo': S.draft.pop(); break;
     case 'vClear': S.draft = []; break;
-    case 'vDone': S.drawing = false; setSetting('area', S.draft); break;
+    case 'vDone': S.drawing = false; set('area', S.draft); break;
     case 'vCancel': S.drawing = false; break;
-    case 'start': startGame(); break;
-    case 'ztog': setSetting('zone', !setv('zone')); break;
-    case 'catch': S.confirm = 'catch:' + id; break;
-    case 'catchGo': S.confirm = null; sendCatch(id); break;
-    case 'caught': S.confirm = 'caught'; break;
-    case 'caughtGo': S.confirm = null; beCaught(null); break;
-    case 'end': S.confirm = 'end'; break;
-    case 'endGo': S.confirm = null; endGame(); break;
-    case 'again': newRound(); break;
+    case 'start': unlockAudio(); startGame(); break;
+    case 'ton': unlockAudio(); { const was = S.sound; S.sound = true; play('pingH'); S.sound = was; } S.tonAsk = true; break;
+    case 'tonYes': S.tonOk = true; S.tonAsk = false; LS.set('mh_ton', '1'); pubMe(true); break;
+    case 'tonNo': S.tonAsk = false; toast('Stummschalter aus und Lautstärke hoch, dann nochmal testen.'); break;
+    case 'xfer': S.confirm = 'xfer'; break;
+    case 'xferTo': S.confirm = null; pubCfg({ ...S.cfg, host: id }); break;
+    case 'cancel': S.confirm = null; break;
     case 'leave': S.confirm = 'leave'; break;
     case 'leaveGo': S.confirm = null; leave(); break;
-    case 'cancel': S.confirm = null; break;
+    case 'target': S.target = id; if (S.pocket) break; { const sg = sighting(id); if (sg && S.pos) { S.fitUntil = now() + 8000; fitLL([[S.pos.lat, S.pos.lng], [sg.lat, sg.lng]]); } } break;
+    case 'catch': unlockAudio(); sendCatch(id); break;
+    case 'resend': resendCatch(id); break;
+    case 'hc': S.confirm = 'hc:' + id; break;
+    case 'hcGo': { S.confirm = null; const rq = S.creq[id]; hostCatch(id, rq && rq.s === S.cfg.startAt ? rq.from : null); break; }
+    case 'end': S.confirm = 'end'; break;
+    case 'endGo': S.confirm = null; finishGame('abort'); break;
+    case 'again': newRound(); break;
+    case 'caught': S.confirm = 'caught'; break;
+    case 'caughtBy': S.confirm = null; beCaught(id || null); break;
+    case 'snd': S.sound = !S.sound; LS.set('mh_sound', S.sound ? '1' : '0'); if (S.sound) { unlockAudio(); play('tick'); } break;
+    case 'voice': S.voice = !S.voice; LS.set('mh_voice', S.voice ? '1' : '0'); if (S.voice) { unlockAudio(); say('Sprachansagen an.'); } break;
+    case 'nears': S.nearSound = !S.nearSound; LS.set('mh_nears', S.nearSound ? '1' : '0'); if (S.nearSound) { unlockAudio(); const w = S.sound; S.sound = true; play('near'); S.sound = w; } break;
+    case 'pocket': S.pocket = true; break;
+    case 'map': S.pocket = false; break;
+    case 'pocketCatch': S.pocket = false; setSheet('half'); break;
+    default: return;
   }
   render();
 });
-$('#grab').onclick = () => { S.sheetMin = !S.sheetMin; renderSheet(); };
-$('#btnCenter').onclick = () => { if (S.pos) map.setView([S.pos.lat, S.pos.lng], Math.max(map.getZoom(), 16)); else toast('Noch kein GPS-Signal.', ''); };
-function renderSoundIcon() { $('#btnSound').style.opacity = S.sound ? '1' : '.4'; }
-$('#btnSound').onclick = () => { S.sound = !S.sound; LS.set('mh_sound', S.sound ? '1' : '0'); unlockAudio(); renderSoundIcon(); toast(S.sound ? 'Ton an' : 'Ton aus', ''); if (S.sound) beep([[880, .08]]); };
-renderSoundIcon();
-
+// Panel ziehen oder antippen
+(() => {
+  let d = null;
+  const g = $('#grab');
+  g.addEventListener('pointerdown', e => { d = { y: e.clientY, h: $('#sheet').offsetHeight, moved: false }; $('#sheet').style.transition = 'none'; g.setPointerCapture(e.pointerId); });
+  g.addEventListener('pointermove', e => {
+    if (!d) return; const dy = e.clientY - d.y; if (Math.abs(dy) > 6) d.moved = true;
+    const h = Math.max(110, Math.min(innerHeight - topH() - 4, d.h - dy));
+    $('#sheet').style.height = h + 'px'; document.documentElement.style.setProperty('--sheet-h', h + 'px');
+  });
+  const end = () => {
+    if (!d) return; $('#sheet').style.transition = '';
+    const ph = phase(), lob = ph === 'lobby' || ph === 'none';
+    if (lob) S.lobbyMin = d.moved ? $('#sheet').offsetHeight < sheetPx('lobby') * 0.6 : !S.lobbyMin;
+    else if (!S.drawing) {
+      const order = ['peek', 'half', 'full'];
+      if (!d.moved) S.sheet = order[(order.indexOf(S.sheet) + 1) % 3];
+      else { const h = $('#sheet').offsetHeight; S.sheet = order.reduce((best, k) => Math.abs(sheetPx(k) - h) < Math.abs(sheetPx(best) - h) ? k : best, 'peek'); }
+    }
+    d = null; $('#sheet').style.height = ''; render();
+    if (S.follow && S.pos) setTimeout(followTick, 330);
+  };
+  g.addEventListener('pointerup', end); g.addEventListener('pointercancel', end);
+})();
+$('#bFollow').onclick = () => { S.follow = true; S.fitUntil = 0; if (S.pos) centerOn([S.pos.lat, S.pos.lng], Math.max(map.getZoom(), 16)); else toast('Noch kein GPS-Signal.'); updFab(); };
+$('#bFit').onclick = () => {
+  const lls = []; if (S.pos) lls.push([S.pos.lat, S.pos.lng]);
+  const ph = phase();
+  if (ph === 'hunt' && myRole() === 'hunter') freeRunners().forEach(id => { const s = sighting(id); if (s) lls.push([s.lat, s.lng]); });
+  for (const id of (inGame() ? gameIds() : lobbyList().on.map(p => p.id))) { if (id === me.id) continue; if (inGame() && role(id) !== myRole() && ph !== 'ended') continue; const r = rec(id); if (r && r.lat != null) lls.push([r.lat, r.lng]); }
+  const z = zoneNow(); if (z && ph !== 'ended') { const c = L.latLng(z.lat, z.lng).toBounds(z.r * 2); lls.push([c.getNorth(), c.getEast()], [c.getSouth(), c.getWest()]); }
+  if (lls.length > 1) { S.follow = false; fitLL(lls); updFab(); } else toast('Noch nichts zum Anzeigen.');
+};
+$('#bPocket').onclick = () => { S.pocket = true; render(); };
+$('#bSound').onclick = () => { S.sound = !S.sound; LS.set('mh_sound', S.sound ? '1' : '0'); if (S.sound) { unlockAudio(); play('tick'); } toast(S.sound ? 'Ton an' : 'Ton aus'); render(); };
+$('#reveal').onclick = () => { $('#reveal').hidden = true; S.revealUntil = 0; };
 async function share() {
   const url = location.origin + location.pathname + '#' + S.code;
   const text = 'Manhunt! Komm ins Spiel, Code ' + S.code;
   try { if (navigator.share) { await navigator.share({ title: 'Manhunt', text, url }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
-  try { await navigator.clipboard.writeText(text + ': ' + url); toast('Link kopiert', ''); } catch (e) { toast('Code: ' + S.code, ''); }
+  try { await navigator.clipboard.writeText(text + ': ' + url); toast('Link kopiert'); } catch (e) { toast('Code: ' + S.code); }
+}
+function showQr() {
+  const url = location.origin + location.pathname + '#' + S.code;
+  let svg = '';
+  try { const q = qrcode(0, 'M'); q.addData(url); q.make(); svg = q.createSvgTag({ cellSize: 6, margin: 0, scalable: true }); } catch (e) {}
+  $('#qr').innerHTML = `<p>Mit der Handy-Kamera scannen</p><div class="q">${svg || 'QR-Code nicht verfügbar'}</div><b>${esc(S.code)}</b><p>${esc(url.replace(/^https?:\/\//, ''))}</p><button class="btn" data-act="qrClose" style="max-width:280px">Schließen</button>`;
+  $('#qr').hidden = false;
 }
 
-function toast(msg, kind) {
-  const el = document.createElement('div'); el.className = 'toast ' + (kind || ''); el.textContent = msg;
-  $('#toasts').appendChild(el); setTimeout(() => el.remove(), 4200);
-  while ($('#toasts').children.length > 3) $('#toasts').firstChild.remove();
-}
-function showStartErr(m) { const e = $('#startErr'); e.textContent = m; e.hidden = false; }
-
-// Start-Bildschirm
+// ================= Start =================
 $('#nameIn').value = me.name;
 const hashCode = (location.hash || '').replace('#', '').toUpperCase();
 if (/^[A-Z0-9]{5}$/.test(hashCode)) $('#codeIn').value = hashCode;
@@ -994,24 +1830,17 @@ $('#codeIn').addEventListener('input', e => { e.target.value = e.target.value.to
 $('#btnCreate').onclick = () => { let c; do { c = rid(5); } while (!/[A-Z]/.test(c)); enterRoom(c, true); };
 $('#btnJoin').onclick = () => enterRoom($('#codeIn').value.trim().toUpperCase(), false);
 $('#codeIn').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btnJoin').click(); });
-
-// Nach Neuladen automatisch zurück in den Raum
 const saved = LS.get('mh_room');
 if (saved && me.name && (!hashCode || hashCode === saved)) {
-  const n = document.createElement('button'); n.className = 'btn wide'; n.textContent = 'Zurück in Raum ' + saved;
+  const n = document.createElement('button'); n.className = 'btn'; n.textContent = 'Zurück in Raum ' + saved;
   n.onclick = () => { $('#nameIn').value = me.name; enterRoom(saved, false); };
   $('#btnCreate').before(n);
 }
-
-// Takt
-setInterval(() => {
-  if (!S.T) return;
-  tickGame(); renderHud();
-  const ph = phase();
-  if (ph === 'head' || ph === 'hunt') { renderMap(); const zl = document.querySelector('[data-zone]'); if (zl) { const t = document.createElement('div'); t.innerHTML = zoneLine(); if (t.firstChild) zl.textContent = t.firstChild.textContent; } }
-}, 1000);
-setInterval(() => { if (S.T) { pubMe(true); renderSheet(); } }, 10000);
-window.addEventListener('pagehide', () => { if (S.T) pubMe(true); });
+addEventListener('resize', () => { applySheet(); renderEdges(); });
+if (/[?&]debug\b/.test(location.search)) window.__mh = { S, me, phase, zoneNow, role, myRole, caughtInfo, times, sighting, freeRunners };
+setInterval(tick, 1000);
+setInterval(() => { if (S.T) pubMe(true); }, 10000);
+addEventListener('pagehide', () => { if (S.T) pubMe(true); });
 })();
 </script>
 </body>
